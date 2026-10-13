@@ -40,14 +40,14 @@ alter table public.admin_users enable row level security;
 alter table public.stand_registrations enable row level security;
 alter table public.published_stands enable row level security;
 
-revoke all on public.admin_users from anon, authenticated;
-revoke all on public.stand_registrations from anon, authenticated;
-revoke all on public.published_stands from anon, authenticated;
-grant select on public.admin_users to authenticated;
+revoke all on public.admin_users from public, anon, authenticated;
+revoke all on public.stand_registrations from public, anon, authenticated;
+revoke all on public.published_stands from public, anon, authenticated;
+grant select (user_id) on public.admin_users to authenticated;
 grant insert on public.stand_registrations to anon, authenticated;
 grant select on public.stand_registrations to authenticated;
-grant select on public.published_stands to anon, authenticated;
-grant insert, update, delete on public.published_stands to authenticated;
+grant select (id, created_at, address, categories, food_available, food_description, description, lat, lng) on public.published_stands to anon, authenticated;
+grant update, delete on public.published_stands to authenticated;
 
 create policy "Admins can see their own admin marker" on public.admin_users
   for select to authenticated using (user_id = (select auth.uid()));
@@ -104,3 +104,35 @@ do $$ begin
 end $$;
 
 -- After creating the Auth user, run supabase-admin.sql to grant admin access.
+
+-- Shared event date used by the public countdown and admin settings.
+create table if not exists public.event_settings (
+  id boolean primary key default true check (id = true),
+  event_date date not null default date '2027-09-01'
+);
+insert into public.event_settings (id, event_date)
+values (true, date '2027-09-01')
+on conflict (id) do nothing;
+alter table public.event_settings enable row level security;
+revoke all on public.event_settings from anon, authenticated;
+grant select on public.event_settings to anon, authenticated;
+grant update on public.event_settings to authenticated;
+drop policy if exists "Anyone can read event date" on public.event_settings;
+create policy "Anyone can read event date" on public.event_settings
+  for select to anon, authenticated using (true);
+drop policy if exists "Admins can update event date" on public.event_settings;
+create policy "Admins can update event date" on public.event_settings
+  for update to authenticated
+  using (exists (select 1 from public.admin_users a where a.user_id = (select auth.uid())))
+  with check (exists (select 1 from public.admin_users a where a.user_id = (select auth.uid())));
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'event_settings'
+  ) then
+    alter publication supabase_realtime add table public.event_settings;
+  end if;
+end $$;
