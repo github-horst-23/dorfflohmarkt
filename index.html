@@ -20,7 +20,7 @@
   <header class="topbar">
     <button class="menu-button" id="menuButton" aria-label="Menü öffnen" aria-expanded="false"><span></span><span></span><span></span></button>
     <a class="brand" href="#karte" aria-label="Dorfflohmarkt Startseite"><img class="brand-logo" src="ovd-logo.png" alt=""><span><strong>DORFFLOHMARKT</strong><small>DUDENHOFEN</small></span></a>
-    <div class="header-actions"><button class="install-button" id="installButton" type="button" hidden>App installieren</button><button class="header-fav" id="header-fav" data-page="favoriten" aria-label="Favoriten öffnen">☆ <span id="favCount">0</span></button></div>
+    <div class="header-actions"><button class="install-button" id="installButton" type="button" hidden>App installieren</button><button class="header-refresh" id="refreshStands" type="button" aria-label="Standdaten aus Supabase aktualisieren" aria-busy="false" title="Standdaten aktualisieren"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9c2.52 0 4.93 1 6.74 2.74L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9c-2.52 0-4.93-1-6.74-2.74L3 16M8 16H3v5"/></svg></button></div>
   </header>
 
   <nav class="drawer" id="drawer" aria-hidden="true">
@@ -31,8 +31,8 @@
     <a href="#favoriten" class="nav-link" data-page="favoriten"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.3.9-4.6 4.5 1.1 6.3-5.6-3-5.6 3 1.1-6.3-4.6-4.5 6.3-.9Z"/></svg></span> Favoriten <b id="drawerFavCount">0</b></a>
     <a href="#hinweise" class="nav-link" data-page="hinweise"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 4v10M12 18h.01"/></svg></span> Wichtige Hinweise</a>
     <a href="mailto:flohmarkt@dudenhofen.org" class="nav-link"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 16l9-5.5V20H3z"/><path d="M3 10.5 7.5 5h9l4.5 5.5M3 10.5l6 4m12-4-6 4"/></svg></span> Kontakt</a>
-    <a href="https://www.dudenhofen.org/" class="nav-link" target="_blank" rel="noopener noreferrer"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z"/></svg></span> Homepage des Ortsvereins</a>
-    <a href="#admin" class="nav-link admin-nav-link" data-page="admin"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3"/></svg></span> Admin</a>
+    <a href="https://www.dudenhofen.org/" id="organizerHomepage" class="nav-link" target="_blank" rel="noopener noreferrer" aria-label="Homepage des Ortsvereins in einem neuen Fenster öffnen"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z"/></svg></span> Homepage des Ortsvereins</a>
+    <a href="#admin" class="nav-link admin-nav-link" data-page="admin"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3"/></svg></span> Admin <b id="drawerAdminCount" aria-live="polite" hidden></b></a>
   </nav>
   <div class="scrim" id="scrim"></div>
 
@@ -56,7 +56,7 @@
             <div class="map-caption"><span>✳ 67373 Dudenhofen, Rheinland-Pfalz</span><span>Stände erscheinen nach bestätigter Anmeldung</span></div>
             <div class="map-pin-legend" aria-label="Legende der Kartenpins"><span class="map-pin-legend-item"><span class="map-pin-badge map-pin-badge--favorite" aria-hidden="true"><img src="marker-favorite.svg" alt=""></span>Favorit</span><span class="map-pin-legend-item"><span class="map-pin-badge map-pin-badge--food" aria-hidden="true"><img src="marker-food.svg" alt=""></span>Mit Verpflegung</span></div>
           </div>
-          <aside class="side-panel"><div class="stat-row"><span class="stat-icon">⌂</span><span><strong id="standCount">0 Stände</strong><small>in 67373 Dudenhofen</small></span></div><div class="side-divider"></div><button class="secondary-button" data-page="anmeldung">Stand anmelden <span>↗</span></button><div class="organizer"><img class="organizer-logo" src="ovd-logo.png" alt="Wappen des Ortsvereins Dudenhofen e.V."><span><small>MIT LIEBE ORGANISIERT VOM</small><strong>Ortsverein Dudenhofen e.V.</strong></span></div></aside>
+          <aside class="side-panel"><div class="stat-row"><span class="stat-icon">⌂</span><span><strong id="standCount" aria-live="polite" title="Anzahl der Standpins auf der Karte">0 Stände</strong></span></div><div class="side-divider"></div><button class="secondary-button" data-page="anmeldung">Stand anmelden <span>↗</span></button><div class="organizer"><img class="organizer-logo" src="ovd-logo.png" alt="Wappen des Ortsvereins Dudenhofen e.V."><span><small>MIT LIEBE ORGANISIERT VOM</small><strong>Ortsverein Dudenhofen e.V.</strong></span></div></aside>
         </div>
         <section class="nearby"><div class="section-heading compact"><div><p class="eyebrow">ANGEMELDETE STÄNDE</p></div><span id="resultCount">0 Stände</span></div><div class="stand-grid" id="standGrid"></div><p class="empty-inline" id="noStands">Die Stände für 67373 Dudenhofen werden nach der Anmeldung durch den Ortsverein ergänzt.</p></section>
       </div>

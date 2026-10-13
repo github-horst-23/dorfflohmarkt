@@ -3,8 +3,10 @@ window.createStandGeocoder = function ({ client, config, onCoordinates, onStatus
   const cache = new Map(), pending = new Set(), retryAfter = new Map();
   let unavailableUntil = 0, pendingTimer = null;
   const cacheKey = stand => JSON.stringify([stand.id, stand.address]);
-  return async function locateStands(stands) {
+  return async function locateStands(stands, { retry = false } = {}) {
     if (!client || !config?.enabled) return;
+    // Manual refresh retries transient client failures. Shared server limits still apply.
+    if (retry) { unavailableUntil = 0; retryAfter.clear(); }
     const now = Date.now(), missing = [];
     for (const [key, saved] of cache) if (saved.expiresAt <= now) cache.delete(key);
     for (const stand of stands) {
@@ -16,7 +18,8 @@ window.createStandGeocoder = function ({ client, config, onCoordinates, onStatus
       if (stand.geocodingSource === 'maps-co') onCoordinates([{ id: stand.id, address: stand.address, lat: null, lng: null, expiresAt: 0 }]);
       if (!pending.has(key) && (retryAfter.get(key) || 0) <= now) missing.push({ id: stand.id, address: stand.address, key });
     }
-    if (!missing.length || unavailableUntil > now) return;
+    if (!missing.length) { if (!pending.size) onStatus(''); return; }
+    if (unavailableUntil > now) return;
     missing.forEach(stand => pending.add(stand.key));
     onStatus('Standpositionen werden ermittelt …');
     let failed = false;

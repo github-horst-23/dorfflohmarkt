@@ -8,7 +8,7 @@
 .drawer-logo{width:56px;height:65px;object-fit:contain}
 .organizer-logo{width:34px;height:40px;object-fit:contain;flex:0 0 auto}
 .brand-mark{display:none}
-.real-map{height:365px;background:#eaf0fb}
+.real-map{height:730px;background:#eaf0fb}
 .empty-inline{font-size:11px;color:var(--muted);line-height:1.6}
 .fixed-location{background:#eaf0fb!important;color:var(--green)!important;font-weight:700}
 button,.primary-button,.secondary-button,.nav-link{touch-action:manipulation}
@@ -26,7 +26,7 @@ button,.primary-button,.secondary-button,.nav-link{touch-action:manipulation}
   .hero-art{height:215px}
   .content-wrap{padding-left:13px;padding-right:13px}
   .map-card{padding:9px;border-radius:12px}
-  .map-canvas.real-map{height:min(54svh,430px);min-height:320px}
+  .map-canvas.real-map{height:min(108svh,860px);min-height:640px}
   .map-toolbar{position:sticky;top:60px;z-index:5;background:var(--paper)}
   .map-search input{height:44px;font-size:12px}
   .filter-button{min-width:44px}
@@ -272,4 +272,11 @@ h1.page-title{margin:0 0 22px;font:600 clamp(27px,3.4vw,38px)/1.12 Manrope,sans-
 .filter-features{display:flex;flex-wrap:wrap;gap:7px;flex-basis:100%;padding-top:3px}
 .consent a{color:var(--green);text-decoration:underline;text-underline-offset:2px}
 #registrationForm>.rules-confirmation,#registrationForm>.submit-button{margin-top:3em}
+.header-refresh{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;flex-shrink:0;padding:10px;border:1px solid var(--line);border-radius:50%;background:var(--paper);color:var(--green)}
+.header-refresh svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.header-refresh:disabled{opacity:.6;cursor:wait}
+.header-refresh.is-refreshing svg{animation:refresh-spin .9s linear infinite}
+@keyframes refresh-spin{to{transform:rotate(360deg)}}
+@media(max-width:560px){.header-actions{gap:3px}.topbar{gap:7px}.brand{gap:6px}}
+@media(prefers-reduced-motion:reduce){.header-refresh.is-refreshing svg{animation:none}}
 @media(max-width:380px){.drawer{padding-left:18px;padding-right:18px}.drawer-brand{gap:8px}.drawer-brand .drawer-logo{width:36px;height:44px}.drawer-brand strong{font-size:clamp(10px,3.6vw,12px)}}

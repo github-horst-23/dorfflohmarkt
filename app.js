@@ -1,13 +1,13 @@
-// Sample listings for previewing the public stand list.
-const exampleStands=[
-  {id:'example-anne-frank',title:'Beispielstand',address:'Anne-Frank-Str. 6, 67373 Dudenhofen',categories:['Gartenbedarf'],food_available:'Nein',food_description:'',description:'',isExample:true},
-  {id:'example-goethe',title:'Beispielstand',address:'Goethestraße 25, 67373 Dudenhofen',categories:['Babybekleidung'],food_available:'Ja',food_description:'Kaffee und Kuchen',description:'',isExample:true},
-  {id:'example-beethoven',title:'Beispielstand',address:'Beethovenstr. 4, 67373 Dudenhofen',categories:['Haushaltswaren'],food_available:'Nein',food_description:'',description:'',isExample:true}
-];
-let stands=[...exampleStands];
+// All stand data is loaded from Supabase. Retain favorites from the former examples.
+const legacyStandIds={
+  'example-anne-frank':'20288ed3-2b71-520c-b98b-ba928e3011ac',
+  'example-goethe':'0ad76c3b-8c2b-51d2-897b-cb2ae1417d27',
+  'example-beethoven':'943afd79-7ef8-5146-bcfd-7358a2edeba6'
+};
+let stands=[];
 const supabaseConfig=window.DORFFLOHMARKT_SUPABASE||{};
 const supabaseClient=window.supabase?.createClient&&supabaseConfig.url&&supabaseConfig.anonKey?window.supabase.createClient(supabaseConfig.url,supabaseConfig.anonKey):null;
-const getFavs=()=>{try{return JSON.parse(localStorage.getItem('dorfflohmarkt-favs')||'[]')}catch{return []}};
+const getFavs=()=>{try{const saved=JSON.parse(localStorage.getItem('dorfflohmarkt-favs')||'[]');return Array.isArray(saved)?[...new Set(saved.filter(id=>typeof id==='string').map(id=>legacyStandIds[id]||id))]:[]}catch{return []}};
 let favorites=getFavs(),activeFilter='Alle',search='';
 const featureFilters={favorites:false,food:false};
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
@@ -56,7 +56,7 @@ function updateCountdown(){
 updateCountdown();
 setInterval(updateCountdown,1000);
 function saveFavs(){localStorage.setItem('dorfflohmarkt-favs',JSON.stringify(favorites));renderCounts();renderStands();}
-function renderCounts(){$('#favCount').textContent=favorites.length;$('#drawerFavCount').textContent=favorites.length;$('#favoritesSummary').textContent=`${favorites.length} ${favorites.length===1?'Stand':'Stände'}`}
+function renderCounts(){$('#drawerFavCount').textContent=favorites.length;$('#favoritesSummary').textContent=`${favorites.length} ${favorites.length===1?'Stand':'Stände'}`}
 function mainCategory(category){
   const value=String(category).trim();
   if(/^Sonstiges(?:\s*:|$)/i.test(value))return 'Sonstiges';
@@ -72,9 +72,10 @@ function matches(s){
     (!featureFilters.favorites||favorites.includes(s.id))&&(!featureFilters.food||s.food_available==='Ja');
 }
 function escapeHtml(value=''){return String(value).replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]))}
-function streetAddress(address){
-  return String(address||'').split(',')[0].replace(/\s*\b67373\b.*$/,'').trim()||'Standadresse folgt';
+function streetAddress(address,fallback='Standadresse folgt'){
+  return String(address||'').split(',')[0].replace(/\s*\b\d{5}\b.*$/,'').trim()||fallback;
 }
+function localStandAddress(address){const street=streetAddress(address,'');return street?`${street}, 67373 Dudenhofen`:'67373 Dudenhofen'}
 function card(s){
   const liked=favorites.includes(s.id),heading=streetAddress(s.address);
   return `<article class="stand-card"><div class="stand-card-top"><h3>${escapeHtml(heading)}</h3><button class="favorite-toggle ${liked?'active':''}" data-fav="${escapeHtml(s.id)}" aria-label="${liked?'Aus Favoriten entfernen':'Zu Favoriten hinzufügen'}: ${escapeHtml(heading)}">${liked?'★':'☆'}</button></div><div class="tag-row">${(s.categories||[]).map(c=>`<span class="tag">${escapeHtml(c)}</span>`).join('')}</div>${s.description?`<p class="card-desc">${escapeHtml(s.description)}</p>`:''}${s.food_available==='Ja'&&s.food_description?`<p class="card-desc"><strong>Verpflegung:</strong> ${escapeHtml(s.food_description)}</p>`:''}</article>`;
@@ -85,7 +86,6 @@ function renderStands(){
   $('#noStands').hidden=visible.length>0;
   $('#noStands').textContent=stands.length?'Keine Stände für diese Auswahl gefunden.':'Noch keine Stände angemeldet.';
   $('#resultCount').textContent=`${visible.length} ${visible.length===1?'Stand':'Stände'}`;
-  $('#standCount').textContent=`${visible.length} ${visible.length===1?'Stand':'Stände'}`;
   const favs=favorites.map(id=>stands.find(s=>s.id===id)).filter(Boolean);
   $('#favoritesGrid').innerHTML=favs.map(card).join('');
   $('#emptyFavorites').classList.toggle('visible',favs.length===0);
@@ -99,11 +99,17 @@ function renderStands(){
   }));
   renderCounts();refreshStandPins();
 }
-function renderFavoriteRoute(favs){const link=$('#planFavoritesRoute'),message=$('#routePlannerMessage');const destinations=favs.map(stand=>String(stand.address||'').trim()).filter(Boolean).map(address=>`${address}, 67373 Dudenhofen`);if(!destinations.length){link.removeAttribute('href');link.setAttribute('aria-disabled','true');message.textContent=favs.length?'Für deine Favoriten ist keine Adresse verfügbar.':'Speichere Stände mit Adresse, um eine Route zu planen.';return}const destination=destinations.at(-1),waypoints=destinations.slice(0,-1),url=new URL('https://www.google.com/maps/dir/');url.searchParams.set('api','1');url.searchParams.set('destination',destination);url.searchParams.set('travelmode','walking');if(waypoints.length)url.searchParams.set('waypoints',waypoints.join('|'));link.href=url.toString();link.setAttribute('aria-disabled','false');message.textContent=`${destinations.length} ${destinations.length===1?'Stand':'Stände'} in deiner gespeicherten Reihenfolge. Google Maps plant die Route zu Fuß.`}
+function renderFavoriteRoute(favs){const link=$('#planFavoritesRoute'),message=$('#routePlannerMessage');const destinations=favs.map(stand=>String(stand.address||'').trim()).filter(Boolean).map(localStandAddress);if(!destinations.length){link.removeAttribute('href');link.setAttribute('aria-disabled','true');message.textContent=favs.length?'Für deine Favoriten ist keine Adresse verfügbar.':'Speichere Stände mit Adresse, um eine Route zu planen.';return}const destination=destinations.at(-1),waypoints=destinations.slice(0,-1),url=new URL('https://www.google.com/maps/dir/');url.searchParams.set('api','1');url.searchParams.set('destination',destination);url.searchParams.set('travelmode','walking');if(waypoints.length)url.searchParams.set('waypoints',waypoints.join('|'));link.href=url.toString();link.setAttribute('aria-disabled','false');message.textContent=`${destinations.length} ${destinations.length===1?'Stand':'Stände'} in deiner gespeicherten Reihenfolge. Google Maps plant die Route zu Fuß.`}
 function toast(text){const t=$('#toast');t.textContent=text;t.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.classList.remove('show'),2600)}
 function showPage(name){const page=['karte','anmeldung','favoriten','hinweise','admin'].includes(name)?name:'karte';$$('.page').forEach(p=>p.classList.toggle('active',p.id===`page-${page}`));$$('.nav-link').forEach(a=>a.classList.toggle('active',a.dataset.page===page));closeDrawer();window.scrollTo({top:0,behavior:'smooth'});if(page==='karte'&&townMap)setTimeout(()=>townMap.invalidateSize(),80);if(page==='admin')refreshAdmin();location.hash=page}
-const drawer=$('#drawer'),scrim=$('#scrim');function openDrawer(){drawer.classList.add('open');scrim.classList.add('show');drawer.setAttribute('aria-hidden','false');$('#menuButton').setAttribute('aria-expanded','true')}function closeDrawer(){drawer.classList.remove('open');scrim.classList.remove('show');drawer.setAttribute('aria-hidden','true');$('#menuButton').setAttribute('aria-expanded','false')}
+const drawer=$('#drawer'),scrim=$('#scrim');function openDrawer(){drawer.classList.add('open');scrim.classList.add('show');drawer.setAttribute('aria-hidden','false');$('#menuButton').setAttribute('aria-expanded','true');refreshPendingApplicationCount()}function closeDrawer(){drawer.classList.remove('open');scrim.classList.remove('show');drawer.setAttribute('aria-hidden','true');$('#menuButton').setAttribute('aria-expanded','false')}
 $('#menuButton').addEventListener('click',openDrawer);$('#closeMenu').addEventListener('click',closeDrawer);scrim.addEventListener('click',closeDrawer);$$('[data-page]').forEach(el=>el.addEventListener('click',e=>{e.preventDefault();showPage(el.dataset.page)}));$$('.brand[href="#karte"],.hero .primary-button').forEach(el=>el.addEventListener('click',e=>{if(el.classList.contains('brand')){e.preventDefault();showPage('karte')}else{e.preventDefault();document.querySelector('#karte-map').scrollIntoView({behavior:'smooth'})}}));
+$('#organizerHomepage').addEventListener('click',event=>{
+  if(event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
+  event.preventDefault();
+  window.open(event.currentTarget.href,'_blank','popup,noopener,noreferrer,width=1100,height=800');
+  closeDrawer();
+});
 $('#filterButton').addEventListener('click',()=>{
   const expanded=$('#filters').classList.toggle('show');
   $('#filterButton').setAttribute('aria-expanded',String(expanded));
@@ -140,9 +146,10 @@ $('#registrationForm').addEventListener('submit',async e=>{
   const otherOffer=data.get('otherOffer')?.trim();
   if(otherOffer)categories.push(`Sonstiges: ${otherOffer}`);
   if(!categories.length){const firstGroup=$('.category-group');if(firstGroup){firstGroup.open=true;firstGroup.querySelector('summary').focus();firstGroup.scrollIntoView({behavior:'smooth',block:'center'})}toast('Bitte wähle mindestens ein Verkaufsangebot aus.');return}
-  const application={first_name:data.get('firstName'),last_name:data.get('lastName'),email:data.get('email'),address:data.get('address').trim(),categories,food_available:data.get('foodAvailable')||'Nein',food_description:data.get('foodDescription')||'',description:data.get('description')||'',status:'pending'};
+  const application={first_name:data.get('firstName'),last_name:data.get('lastName'),email:data.get('email'),address:localStandAddress(data.get('address')),categories,food_available:data.get('foodAvailable')||'Nein',food_description:data.get('foodDescription')||'',description:data.get('description')||'',status:'pending'};
   const {error}=await supabaseClient.from('stand_registrations').insert(application);
   if(error){toast('Die Anmeldung konnte nicht gesendet werden. Bitte versuche es später erneut.');return}
+  refreshPendingApplicationCount();
   const name=escapeHtml(application.first_name);
   form.innerHTML=`<div class="success-state"><span class="success-icon">✓</span><p class="eyebrow">ANMELDUNG EINGEGANGEN</p><h2>Danke, ${name}!</h2><p>Deine Anmeldung wurde an den Ortsverein übermittelt. Sobald ein Admin sie geprüft und freigegeben hat, erscheint dein Stand in der Karte.</p><button class="secondary-button" type="button" id="backToMap">Zur Karte <span>↗</span></button></div>`;
   form.querySelector('#backToMap').addEventListener('click',()=>showPage('karte'));
@@ -189,13 +196,15 @@ if(window.L){
     html:`<div class="market-map-pin" aria-hidden="true"><img src="./marker.png" alt="">${favorite?'<span class="map-pin-badge map-pin-badge--favorite"><img src="./marker-favorite.svg" alt=""></span>':''}${food?'<span class="map-pin-badge map-pin-badge--food"><img src="./marker-food.svg" alt=""></span>':''}</div>`,
     iconSize:[44,54],iconAnchor:[22,54],popupAnchor:[0,-50]
   });
-  const townIcon=makeMapPin();
-  L.marker([49.3186,8.3886],{icon:townIcon}).addTo(townMap).bindPopup('<strong>67373 Dudenhofen</strong><br>Dorfflohmarkt im Ortsgebiet');
 }else{
   $('#mapCanvas').innerHTML='<div class="map-unavailable"><strong>Karte gerade nicht verfügbar</strong><span>Die Ortskarte braucht eine Internetverbindung.</span><a href="https://www.openstreetmap.org/?mlat=49.3186&mlon=8.3886#map=15/49.3186/8.3886" target="_blank" rel="noreferrer">Dudenhofen auf OpenStreetMap öffnen ↗</a></div>';
 }
+function updateMapStandCount(){
+  const count=townMap?standPinMarkers.length:0;
+  $('#standCount').textContent=`${count} ${count===1?'Stand':'Stände'}`;
+}
 function refreshStandPins(){
-  if(!townMap||!makeMapPin)return;
+  if(!townMap||!makeMapPin){updateMapStandCount();return}
   standPinMarkers.forEach(marker=>townMap.removeLayer(marker));
   standPinMarkers.length=0;
   const visible=stands.filter(s=>Number.isFinite(s.lat)&&Number.isFinite(s.lng)&&
@@ -221,6 +230,7 @@ function refreshStandPins(){
     marker.bindPopup(`<strong>${escapeHtml(streetAddress(s.address))}</strong>${features.length?`<p class="map-popup-features">${escapeHtml(features.join(' · '))}</p>`:''}${food&&s.food_description?`<p class="map-popup-food">${escapeHtml(s.food_description)}</p>`:''}`);
     standPinMarkers.push(marker);
   });
+  updateMapStandCount();
 }
 renderCounts();renderStands();
 if(townMap)locateStandAddresses(stands);
@@ -269,17 +279,34 @@ window.addEventListener('appinstalled', () => {
 // Öffentliche Live-Liste und Moderation via Supabase Auth + Row Level Security.
 let standRefreshSequence=0;
 let lastStandRefreshAt=0;
-async function loadPublishedStands(){
-  if(!supabaseClient)return;
+async function loadPublishedStands({retryGeocoding=false}={}){
+  if(!supabaseClient)return false;
   const sequence=++standRefreshSequence;
   lastStandRefreshAt=Date.now();
-  const {data,error}=await supabaseClient.from('published_stands').select('id,created_at,address,categories,food_available,food_description,description,lat,lng').order('created_at',{ascending:true});
-  if(sequence!==standRefreshSequence)return;
-  if(error){console.warn('Freigegebene Stände konnten nicht geladen werden.');return}
-  stands=[...exampleStands,...(data||[]).map(row=>({...row,title:'Flohmarktstand'}))];
+  const rows=[];
+  let offset=0;
+  for(;;){
+    const {data,error,count}=await supabaseClient.from('published_stands')
+      .select('id,created_at,address,categories,food_available,food_description,description,lat,lng',{count:'exact'})
+      .order('created_at',{ascending:true}).order('id',{ascending:true}).range(offset,offset+499);
+    if(sequence!==standRefreshSequence)return null;
+    if(error){console.warn('Freigegebene Stände konnten nicht geladen werden.');return false}
+    const page=data||[];
+    rows.push(...page);offset+=page.length;
+    if(!page.length||(Number.isFinite(count)&&offset>=count)||(!Number.isFinite(count)&&page.length<500))break;
+  }
+  const previous=new Map(stands.map(stand=>[stand.id,stand]));
+  stands=[...new Map(rows.map(row=>[row.id,row])).values()].map(row=>{
+    const saved=previous.get(row.id);
+    const cached=saved?.address===row.address&&saved.geocodingSource==='maps-co'&&saved.geocodingExpiresAt>Date.now()&&
+      (!Number.isFinite(row.lat)||!Number.isFinite(row.lng));
+    return {...row,title:'Flohmarktstand',...(cached?{lat:saved.lat,lng:saved.lng,geocodingSource:saved.geocodingSource,geocodingExpiresAt:saved.geocodingExpiresAt}:{})};
+  });
   favorites=favorites.filter(id=>stands.some(s=>s.id===id));
   saveFavs();
-  if(townMap)locateStandAddresses(stands);
+  if(!$('#adminDashboard').hidden)renderAdminPublishedStands(stands);
+  if(townMap)await locateStandAddresses(stands,{retry:retryGeocoding});
+  return true;
 }
 if(supabaseClient){
   loadPublishedStands();
@@ -296,6 +323,8 @@ const adminMessage=$('#adminMessage');
 const adminApplications=$('#adminApplications');
 const adminPublishedStands=$('#adminPublishedStands');
 const adminManageMessage=$('#adminManageMessage');
+let adminPublishedSignature='';
+let adminSessionId=null,adminSessionVersion=0;
 const eventDateForm=$('#eventDateForm');
 const eventDateMessage=$('#eventDateMessage');
 function adminStatus(target,message){target.textContent=message}
@@ -321,6 +350,7 @@ adminManualForm.addEventListener('submit',async event=>{
   event.preventDefault();
   if(!supabaseClient){adminStatus(adminMessage,'Das Speichern ist nicht verfügbar.');return}
   const submitButton=adminManualForm.querySelector('.submit-button');
+  if(submitButton.disabled)return;
   submitButton.disabled=true;
   adminStatus(adminMessage,'Stand wird veröffentlicht …');
   try{
@@ -333,7 +363,7 @@ adminManualForm.addEventListener('submit',async event=>{
     const otherOffer=data.get('otherOffer')?.trim();
     if(otherOffer)categories.push(`Sonstiges: ${otherOffer}`);
     if(!categories.length)categories.push('Sonstiges');
-    const application={first_name:data.get('firstName').trim()||'Manuell',last_name:data.get('lastName').trim()||'erfasster Stand',email:data.get('email').trim()||'flohmarkt@dudenhofen.org',address:data.get('address').trim()||'67373 Dudenhofen',categories,food_available:data.get('foodAvailable')||'Nein',food_description:data.get('foodDescription')||'',description:data.get('description')||'',status:'pending'};
+    const application={first_name:data.get('firstName').trim()||'Manuell',last_name:data.get('lastName').trim()||'erfasster Stand',email:data.get('email').trim()||'flohmarkt@dudenhofen.org',address:localStandAddress(data.get('address')),categories,food_available:data.get('foodAvailable')||'Nein',food_description:data.get('foodDescription')||'',description:data.get('description')||'',status:'pending'};
     const {data:registration,error:insertError}=await supabaseClient.from('stand_registrations').insert(application).select('id').single();
     if(insertError){adminStatus(adminMessage,'Der Stand konnte nicht gespeichert werden. Bitte Eingaben und Datenbankzugriff prüfen.');return}
     const {error:publishError}=await supabaseClient.rpc('approve_stand_registration',{registration_id:registration.id});
@@ -349,8 +379,10 @@ adminManualForm.addEventListener('submit',async event=>{
 async function refreshAdmin(){
   if(!supabaseClient){adminStatus(adminLoginMessage,'Supabase ist noch nicht eingerichtet.');return}
   const {data:{session}}=await supabaseClient.auth.getSession();
+  if(adminSessionId!==(session?.user.id||null)){adminSessionId=session?.user.id||null;adminSessionVersion++;pendingCountSequence++;}
   adminLoginForm.hidden=Boolean(session);adminDashboard.hidden=!session;
   if(session){loadApplications();loadAdminPublishedStands();loadEventDate()}
+  else{setPendingApplicationCount(null);adminApplications.innerHTML=''}
 }
 adminLoginForm.addEventListener('submit',async e=>{
   e.preventDefault();if(!supabaseClient){adminStatus(adminLoginMessage,'Supabase ist noch nicht eingerichtet.');return}
@@ -363,18 +395,29 @@ adminLoginForm.addEventListener('submit',async e=>{
 $('#adminLogout').addEventListener('click',async()=>{await supabaseClient?.auth.signOut();await refreshAdmin()});
 supabaseClient?.auth.onAuthStateChange(()=>setTimeout(refreshAdmin,0));
 async function loadApplications(){
+  const sessionVersion=adminSessionVersion;
   adminStatus(adminMessage,'Anmeldungen werden geladen …');
-  const {data,error}=await supabaseClient.from('stand_registrations').select('*').eq('status','pending').order('created_at',{ascending:true});
-  if(error){adminStatus(adminMessage,'Kein Adminzugriff. Bitte den Benutzer in Supabase als Admin freischalten.');return}
-  adminStatus(adminMessage,`${data.length} offene ${data.length===1?'Anmeldung':'Anmeldungen'}`);
+  const {data,error,count}=await supabaseClient.from('stand_registrations').select('*',{count:'exact'}).eq('status','pending').order('created_at',{ascending:true});
+  if(sessionVersion!==adminSessionVersion||adminDashboard.hidden)return;
+  if(error){setPendingApplicationCount(null);adminStatus(adminMessage,'Kein Adminzugriff. Bitte den Benutzer in Supabase als Admin freischalten.');return}
+  const pendingCount=count??data.length;
+  setPendingApplicationCount(pendingCount);
+  adminStatus(adminMessage,`${pendingCount} offene ${pendingCount===1?'Anmeldung':'Anmeldungen'}`);
   adminApplications.innerHTML=data.map(r=>`<article class="admin-application"><div class="admin-toolbar"><div><h3>${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)}</h3><p>${escapeHtml(r.address)}, 67373 Dudenhofen · <a href="mailto:${encodeURIComponent(r.email)}">${escapeHtml(r.email)}</a></p></div><span class="admin-pending">Offen</span></div><div class="tag-row">${(r.categories||[]).map(c=>`<span class="tag">${escapeHtml(c)}</span>`).join('')}</div>${r.description?`<p>${escapeHtml(r.description)}</p>`:''}${r.food_available==='Ja'?`<p><strong>Verpflegung:</strong> ${escapeHtml(r.food_description||'Ja')}</p>`:''}<div class="admin-actions"><button class="primary-button" data-approve="${escapeHtml(r.id)}">Freigeben</button><button class="secondary-button" data-reject="${escapeHtml(r.id)}">Ablehnen</button></div></article>`).join('')||'<p class="empty-inline">Keine offenen Anmeldungen.</p>';
   $$('[data-approve]').forEach(button=>button.addEventListener('click',()=>moderateRegistration(button.dataset.approve,'approve')));
   $$('[data-reject]').forEach(button=>button.addEventListener('click',()=>moderateRegistration(button.dataset.reject,'reject')));
 }
 async function loadAdminPublishedStands(){
-  const {data,error}=await supabaseClient.from('published_stands').select('id,created_at,address,categories,food_available,food_description,description,lat,lng').order('created_at',{ascending:true});
-  if(error){adminStatus(adminManageMessage,'Veröffentlichte Stände konnten nicht geladen werden. Adminzugriff prüfen.');return}
-  adminPublishedStands.innerHTML=(data||[]).map(stand=>`<article class="admin-application admin-published-stand"><details><summary>${escapeHtml(stand.address)}</summary><form class="admin-stand-edit" data-stand-id="${escapeHtml(stand.id)}"><label>Adresse<input name="address" required maxlength="120" value="${escapeHtml(stand.address)}"></label><label>Warengruppen, durch Komma getrennt<input name="categories" required value="${escapeHtml((stand.categories||[]).join(', '))}"></label><label>Verpflegung<select name="foodAvailable"><option value="Nein" ${stand.food_available==='Nein'?'selected':''}>Nein</option><option value="Ja" ${stand.food_available==='Ja'?'selected':''}>Ja</option></select></label><label>Angaben zur Verpflegung<textarea name="foodDescription" maxlength="500">${escapeHtml(stand.food_description||'')}</textarea></label><label>Beschreibung<textarea name="description" maxlength="1000">${escapeHtml(stand.description||'')}</textarea></label><div class="admin-actions"><button class="primary-button" type="submit">Änderungen speichern</button><button class="secondary-button danger-button" type="button" data-delete-stand="${escapeHtml(stand.id)}">Stand löschen</button></div></form></details></article>`).join('')||'<p class="empty-inline">Noch keine veröffentlichten Stände.</p>';
+  if(await loadPublishedStands()===false)adminStatus(adminManageMessage,'Veröffentlichte Stände konnten nicht geladen werden.');
+}
+function renderAdminPublishedStands(data){
+  const opened=new Set([...adminPublishedStands.querySelectorAll('details[open] .admin-stand-edit')].map(form=>form.dataset.standId));
+  const collator=new Intl.Collator('de',{numeric:true,sensitivity:'base'});
+  const sorted=[...data].sort((a,b)=>collator.compare(streetAddress(a.address),streetAddress(b.address)));
+  const signature=JSON.stringify(sorted.map(({id,address,categories,food_available,food_description,description})=>({id,address,categories,food_available,food_description,description})));
+  if(signature===adminPublishedSignature)return;
+  adminPublishedSignature=signature;
+  adminPublishedStands.innerHTML=sorted.map(stand=>`<article class="admin-application admin-published-stand"><details ${opened.has(stand.id)?'open':''}><summary>${escapeHtml(streetAddress(stand.address))}</summary><form class="admin-stand-edit" data-stand-id="${escapeHtml(stand.id)}"><label>Straße und Hausnummer<input name="address" required maxlength="120" value="${escapeHtml(streetAddress(stand.address,''))}"></label><label>Warengruppen, durch Komma getrennt<input name="categories" required value="${escapeHtml((stand.categories||[]).join(', '))}"></label><label>Verpflegung<select name="foodAvailable"><option value="Nein" ${stand.food_available==='Nein'?'selected':''}>Nein</option><option value="Ja" ${stand.food_available==='Ja'?'selected':''}>Ja</option></select></label><label>Angaben zur Verpflegung<textarea name="foodDescription" maxlength="500">${escapeHtml(stand.food_description||'')}</textarea></label><label>Beschreibung<textarea name="description" maxlength="1000">${escapeHtml(stand.description||'')}</textarea></label><div class="admin-actions"><button class="primary-button" type="submit">Änderungen speichern</button><button class="secondary-button danger-button" type="button" data-delete-stand="${escapeHtml(stand.id)}">Stand löschen</button></div></form></details></article>`).join('')||'<p class="empty-inline">Noch keine veröffentlichten Stände.</p>';
   adminPublishedStands.querySelectorAll('.admin-stand-edit').forEach(form=>form.addEventListener('submit',savePublishedStand));
   adminPublishedStands.querySelectorAll('[data-delete-stand]').forEach(button=>button.addEventListener('click',()=>deletePublishedStand(button.dataset.deleteStand)));
 }
@@ -383,26 +426,61 @@ async function savePublishedStand(event){
   const form=event.currentTarget,data=new FormData(form),id=form.dataset.standId;
   const categories=data.get('categories').split(',').map(value=>value.trim()).filter(Boolean);
   if(!categories.length){adminStatus(adminManageMessage,'Bitte mindestens eine Warengruppe eintragen.');return}
-  const address=data.get('address').trim();
+  const address=localStandAddress(data.get('address'));
   const previousAddress=stands.find(stand=>stand.id===id)?.address;
   const locationUpdate=previousAddress!==address?{lat:null,lng:null}:{};
-  const {error}=await supabaseClient.from('published_stands').update({address,categories,food_available:data.get('foodAvailable'),food_description:data.get('foodDescription').trim(),description:data.get('description').trim(),...locationUpdate}).eq('id',id);
-  if(error){adminStatus(adminManageMessage,'Änderungen konnten nicht gespeichert werden.');return}
+  const {data:saved,error}=await supabaseClient.from('published_stands').update({address,categories,food_available:data.get('foodAvailable'),food_description:data.get('foodDescription').trim(),description:data.get('description').trim(),...locationUpdate}).eq('id',id).select('id').maybeSingle();
+  if(error||!saved){adminStatus(adminManageMessage,'Änderungen konnten nicht gespeichert werden.');return}
   adminStatus(adminManageMessage,'Änderungen gespeichert.');
-  await Promise.all([loadAdminPublishedStands(),loadPublishedStands()]);
+  await loadPublishedStands();
 }
 async function deletePublishedStand(id){
   if(!window.confirm('Diesen Stand aus der öffentlichen Karte löschen?'))return;
-  const {error}=await supabaseClient.from('published_stands').delete().eq('id',id);
-  if(error){adminStatus(adminManageMessage,'Der Stand konnte nicht gelöscht werden.');return}
+  const {data:deleted,error}=await supabaseClient.from('published_stands').delete().eq('id',id).select('id').maybeSingle();
+  if(error||!deleted){adminStatus(adminManageMessage,'Der Stand konnte nicht gelöscht werden.');return}
   adminStatus(adminManageMessage,'Stand aus der Karte gelöscht.');
-  await Promise.all([loadAdminPublishedStands(),loadPublishedStands()]);
+  await loadPublishedStands();
 }
 async function moderateRegistration(id,action){
   const {error}=await supabaseClient.rpc(action==='approve'?'approve_stand_registration':'reject_stand_registration',{registration_id:id});
   if(error){adminStatus(adminMessage,'Aktion fehlgeschlagen. Bitte Datenbankeinrichtung und Adminrechte prüfen.');return}
   adminStatus(adminMessage,action==='approve'?'Stand freigegeben und veröffentlicht.':'Anmeldung abgelehnt.');
-  loadApplications();
+  await Promise.all([loadApplications(),loadPublishedStands()]);
 }
+
+function setPendingApplicationCount(count){
+  const badge=$('#drawerAdminCount');
+  badge.hidden=count===null;
+  badge.textContent=count??'';
+  if(count!==null)badge.setAttribute('aria-label',`${count} offene ${count===1?'Anmeldung':'Anmeldungen'}`);
+  else badge.removeAttribute('aria-label');
+}
+let pendingCountSequence=0;
+async function refreshPendingApplicationCount(){
+  const sequence=++pendingCountSequence;
+  if(!supabaseClient){setPendingApplicationCount(null);return}
+  try{
+    const {data:{session}}=await supabaseClient.auth.getSession();
+    if(sequence!==pendingCountSequence)return;
+    if(!session){setPendingApplicationCount(null);return}
+    const {count,error}=await supabaseClient.from('stand_registrations').select('id',{count:'exact',head:true}).eq('status','pending');
+    if(sequence!==pendingCountSequence)return;
+    setPendingApplicationCount(error?null:count);
+  }catch{if(sequence===pendingCountSequence)setPendingApplicationCount(null)}
+}
+setInterval(()=>{if(document.visibilityState==='visible')refreshPendingApplicationCount()},60000);
+$('#refreshStands').addEventListener('click',async event=>{
+  const button=event.currentTarget;
+  if(button.disabled)return;
+  button.disabled=true;button.classList.add('is-refreshing');button.setAttribute('aria-busy','true');
+  try{
+    const loaded=await loadPublishedStands({retryGeocoding:true});
+    if(loaded===false){toast('Standdaten konnten nicht geladen werden. Bitte erneut versuchen.');return}
+    await refreshPendingApplicationCount();
+    if(!adminDashboard.hidden)await Promise.all([loadApplications(),loadEventDate()]);
+    toast(loaded===null?'Standdaten werden bereits aktualisiert.':'Standdaten aktualisiert.');
+  }catch{toast('Standdaten konnten nicht geladen werden. Bitte erneut versuchen.')}
+  finally{button.disabled=false;button.classList.remove('is-refreshing');button.setAttribute('aria-busy','false')}
+});
 
 if(location.hash==='#admin')refreshAdmin();
