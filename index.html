@@ -4,9 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#1749a5" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Dorfflohmarkt" />
   <title>Dorfflohmarkt Dudenhofen</title>
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
   <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="manifest" href="manifest.webmanifest" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -25,9 +28,10 @@
     <p class="eyebrow">ENTDECKEN</p>
     <a href="#karte" class="nav-link active" data-page="karte"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m3.5 6 5.2-2 6.6 2 5.2-2v14l-5.2 2-6.6-2-5.2 2z"/><path d="M8.7 4v14M15.3 6v14"/></svg></span> Karte &amp; Lageplan</a>
     <a href="#anmeldung" class="nav-link" data-page="anmeldung"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span> Anmeldung</a>
-    <a href="#favoriten" class="nav-link" data-page="favoriten"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20.8 8.8c0 5.2-8.8 11-8.8 11s-8.8-5.8-8.8-11A4.8 4.8 0 0 1 12 6.2a4.8 4.8 0 0 1 8.8 2.6Z"/></svg></span> Favoriten <b id="drawerFavCount">0</b></a>
+    <a href="#favoriten" class="nav-link" data-page="favoriten"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.3.9-4.6 4.5 1.1 6.3-5.6-3-5.6 3 1.1-6.3-4.6-4.5 6.3-.9Z"/></svg></span> Favoriten <b id="drawerFavCount">0</b></a>
     <a href="#hinweise" class="nav-link" data-page="hinweise"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 4v10M12 18h.01"/></svg></span> Wichtige Hinweise</a>
     <a href="mailto:flohmarkt@dudenhofen.org" class="nav-link"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 16l9-5.5V20H3z"/><path d="M3 10.5 7.5 5h9l4.5 5.5M3 10.5l6 4m12-4-6 4"/></svg></span> Kontakt</a>
+    <a href="https://www.dudenhofen.org/" class="nav-link" target="_blank" rel="noopener noreferrer"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z"/></svg></span> Homepage des Ortsvereins</a>
     <a href="#admin" class="nav-link admin-nav-link" data-page="admin"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3"/></svg></span> Admin</a>
   </nav>
   <div class="scrim" id="scrim"></div>
@@ -45,14 +49,16 @@
         <h1 class="page-title">Karte &amp; Lageplan</h1>
         <div class="section-heading"><span class="map-label"><i></i> Dudenhofen, Pfalz</span></div>
         <div class="map-layout">
-          <div class="map-card"><div class="map-toolbar"><div class="map-search"><span>⌕</span><input id="searchInput" placeholder="Straße oder Stand suchen" aria-label="Straße oder Stand suchen"><button id="clearSearch" aria-label="Suche löschen">×</button></div><button class="filter-button" id="filterButton">☷ <span>Filter</span></button></div>
-            <div class="filters" id="filters"><button class="filter-chip selected" data-filter="Alle">Alle Stände</button><button class="filter-chip" data-filter="Kinder">Kinder</button><button class="filter-chip" data-filter="Kleidung">Kleidung</button><button class="filter-chip" data-filter="Haushalt">Haushalt</button></div>
+          <div class="map-card"><div class="map-toolbar"><div class="map-search"><span>⌕</span><input id="searchInput" placeholder="Straße oder Stand suchen" aria-label="Straße oder Stand suchen"><button id="clearSearch" aria-label="Suche löschen">×</button></div><button class="filter-button" id="filterButton" aria-controls="filters" aria-expanded="false">☷ <span>Filter</span></button></div>
+            <div class="filters" id="filters" role="group" aria-label="Stände filtern"><button class="filter-chip selected" data-filter="Alle" aria-pressed="true">Alle Stände</button><button class="filter-chip" data-filter="Kleidung" aria-pressed="false">Kleidung</button><button class="filter-chip" data-filter="Spiele, Musik, Elektronik" aria-pressed="false">Spiele, Musik, Elektronik</button><button class="filter-chip" data-filter="Fahrräder, etc." aria-pressed="false">Fahrräder, etc.</button><button class="filter-chip" data-filter="Sonstiges" aria-pressed="false">Sonstiges</button><div class="filter-features" role="group" aria-label="Zusätzliche Filter"><button class="filter-chip" data-feature="favorites" aria-pressed="false">★ Nur Favoriten</button><button class="filter-chip" data-feature="food" aria-pressed="false">Mit Verpflegung</button></div></div>
             <div class="map-canvas real-map" id="mapCanvas" aria-label="Karte von 67373 Dudenhofen"></div>
+            <p id="mapLocationStatus" class="map-location-status" aria-live="polite" hidden></p>
             <div class="map-caption"><span>✳ 67373 Dudenhofen, Rheinland-Pfalz</span><span>Stände erscheinen nach bestätigter Anmeldung</span></div>
+            <div class="map-pin-legend" aria-label="Legende der Kartenpins"><span class="map-pin-legend-item"><span class="map-pin-badge map-pin-badge--favorite" aria-hidden="true"><img src="marker-favorite.svg" alt=""></span>Favorit</span><span class="map-pin-legend-item"><span class="map-pin-badge map-pin-badge--food" aria-hidden="true"><img src="marker-food.svg" alt=""></span>Mit Verpflegung</span></div>
           </div>
-          <aside class="side-panel"><div class="stat-row"><span class="stat-icon">⌂</span><span><strong id="standCount">0 Stände</strong><small>in 67373 Dudenhofen</small></span></div><div class="stat-row"><span class="stat-icon peach">☆</span><span><strong>Schätze für alle</strong><small>Von Vintage bis Spielzeug</small></span></div><div class="side-divider"></div><button class="secondary-button" data-page="anmeldung">Stand anmelden <span>↗</span></button><div class="organizer"><img class="organizer-logo" src="ovd-logo.png" alt="Wappen des Ortsvereins Dudenhofen e.V."><span><small>MIT LIEBE ORGANISIERT VOM</small><strong>Ortsverein Dudenhofen e.V.</strong></span></div></aside>
+          <aside class="side-panel"><div class="stat-row"><span class="stat-icon">⌂</span><span><strong id="standCount">0 Stände</strong><small>in 67373 Dudenhofen</small></span></div><div class="side-divider"></div><button class="secondary-button" data-page="anmeldung">Stand anmelden <span>↗</span></button><div class="organizer"><img class="organizer-logo" src="ovd-logo.png" alt="Wappen des Ortsvereins Dudenhofen e.V."><span><small>MIT LIEBE ORGANISIERT VOM</small><strong>Ortsverein Dudenhofen e.V.</strong></span></div></aside>
         </div>
-        <section class="nearby"><div class="section-heading compact"><div><p class="eyebrow">ANGEMELDETE STÄNDE</p><h2>Hier lohnt sich ein Stopp.</h2></div><span id="resultCount">0 Stände</span></div><div class="stand-grid" id="standGrid"></div><p class="empty-inline" id="noStands">Die Stände für 67373 Dudenhofen werden nach der Anmeldung durch den Ortsverein ergänzt.</p></section>
+        <section class="nearby"><div class="section-heading compact"><div><p class="eyebrow">ANGEMELDETE STÄNDE</p></div><span id="resultCount">0 Stände</span></div><div class="stand-grid" id="standGrid"></div><p class="empty-inline" id="noStands">Die Stände für 67373 Dudenhofen werden nach der Anmeldung durch den Ortsverein ergänzt.</p></section>
       </div>
     </section>
 
@@ -85,7 +91,10 @@
       <label><input type="checkbox" name="category" value="Antiquitäten / Sammlerobjekte"><span>Antiquitäten / Sammlerobjekte</span></label>
       <label><input type="checkbox" name="category" value="Gartenbedarf"><span>Gartenbedarf</span></label>
       <label class="other-offer">Weitere Angebote <span class="optional">OPTIONAL</span><textarea name="otherOffer" rows="2" maxlength="300" placeholder="Was bietest du sonst noch an?"></textarea></label>
-    </div></details><fieldset class="food-fieldset"><legend>Verpflegung anbieten? <span class="optional">OPTIONAL</span></legend><div class="food-options"><label><input type="radio" name="foodAvailable" value="Ja"><span>Ja</span></label><label><input type="radio" name="foodAvailable" value="Nein"><span>Nein</span></label></div><label class="food-details" id="foodDetails" hidden>Welche Verpflegung bietest du an?<textarea name="foodDescription" id="foodDescription" rows="2" placeholder="z. B. Kaffee, Kuchen, kalte Getränke"></textarea></label></fieldset><label>Ein paar Worte zu deinem Stand <span class="optional">OPTIONAL</span><textarea name="description" rows="3" placeholder="Was können Besucher:innen bei dir entdecken?"></textarea></label><label class="consent"><input required type="checkbox" name="consent"><span>Ich stimme zu, dass meine Angaben zur Organisation des Dorfflohmarkts vom Ortsverein Dudenhofen e.V. verarbeitet und technisch in Supabase gespeichert werden.</span></label><button class="primary-button submit-button" type="submit">Anmeldung absenden <span>→</span></button><p class="privacy-note">Deine Anmeldung ist zunächst unverbindlich. Deine Angaben werden zur Prüfung an den Ortsverein übermittelt. Erst nach Freigabe erscheinen die Standdaten in der App.</p></form></div></section>
+    </div></details>
+    <fieldset class="food-fieldset"><legend>Verpflegung anbieten? <small class="required-note">Pflichtfeld</small></legend><div class="food-options"><label><input required type="radio" name="foodAvailable" value="Ja"><span>Ja</span></label><label><input required type="radio" name="foodAvailable" value="Nein"><span>Nein</span></label></div><label class="food-details" id="foodDetails" hidden><span class="field-label">Welche Verpflegung bietest du an? <small class="required-note">Pflichtfeld</small></span><input type="text" name="foodDescription" id="foodDescription" maxlength="120" placeholder="z. B. Kaffee und Kuchen" disabled></label></fieldset>
+    <label class="consent rules-confirmation"><input required type="checkbox" name="rulesAcknowledged"><span>Ich habe die <a href="#hinweise" data-page="hinweise">wichtigen Hinweise</a> gelesen und werde sie einhalten.</span></label>
+    <label class="consent"><input required type="checkbox" name="consent"><span>Ich stimme zu, dass meine Angaben zur Organisation des Dorfflohmarkts vom Ortsverein Dudenhofen e.V. verarbeitet und technisch in Supabase gespeichert werden.</span></label><button class="primary-button submit-button" type="submit">Anmeldung absenden <span>→</span></button><p class="privacy-note">Deine Anmeldung ist zunächst unverbindlich. Deine Angaben werden zur Prüfung an den Ortsverein übermittelt. Erst nach Freigabe erscheinen die Standdaten in der App.</p></form></div></section>
 
     <section class="page" id="page-favoriten"><div class="content-wrap favorites-content"><h1 class="page-title">Favoriten</h1><div class="route-planner"><div class="route-planner-copy"><strong>Route zu deinen Favoriten</strong><p id="routePlannerMessage">Speichere Stände mit Adresse, um eine Route zu planen.</p></div><span id="favoritesSummary" class="favorites-summary-count">0 Stände</span><a id="planFavoritesRoute" class="primary-button route-button" target="_blank" rel="noopener noreferrer" aria-disabled="true">Route planen <span>↗</span></a></div><div class="stand-grid" id="favoritesGrid"></div><div class="empty-state" id="emptyFavorites"><span>☆</span><h3>Noch nichts vorgemerkt.</h3><p>Entdecke die Stände und tippe auf den Stern, um sie hier zu sammeln.</p><button class="secondary-button" data-page="karte">Stände entdecken <span>→</span></button></div></div></section>
 
@@ -93,7 +102,7 @@
       
       <div class="content-wrap notice-content">
         <h1 class="page-title">Wichtige Hinweise</h1>
-        <details class="notice-section" open><summary>Verkauf und Standorte</summary><div class="notice-body"><ul>
+        <details class="notice-section"><summary>Verkauf und Standorte</summary><div class="notice-body"><ul>
           <li>Der Verkauf findet auf privatem Grund in den Höfen der angemeldeten Häuser statt. Dort verkaufen die Anwohner:innen private, gebrauchte Sachen.</li>
           <li>Bevor ein Haus einen Stand anmeldet, muss die Eigentümerin oder der Eigentümer die Genehmigung erteilt haben.</li>
           <li>Gewerblicher Verkauf von Neuware ist nicht erlaubt.</li>
@@ -123,7 +132,7 @@
           <li>Alle Teilnehmenden handeln vollständig auf eigene Rechnung, Haftung und Verantwortung.</li>
           <li>Sorgt eigenverantwortlich dafür, dass sich im Trubel des Flohmarkts niemand unberechtigt Zugang zu eurem Haus verschafft.</li>
         </ul></div></details>
-        <details class="notice-section"><summary>Datenschutz</summary><div class="notice-body"><p>Mit Absenden des Formulars erklärt ihr euch damit einverstanden, dass der OVD eure personenbezogenen Daten für die Durchführung des Dorfflohmarkts verarbeitet. Die Anmeldedaten werden technisch in einer Supabase-Datenbank gespeichert. Erst nach Prüfung werden Adresse und Verkaufsangaben in der öffentlichen Standliste angezeigt. Vor- und Nachnamen sowie E-Mail-Adressen bleiben privat und erscheinen dort nicht.</p></div></details>
+        <details class="notice-section"><summary>Datenschutz</summary><div class="notice-body"><p>Mit Absenden des Formulars erklärt ihr euch damit einverstanden, dass der OVD eure personenbezogenen Daten für die Durchführung des Dorfflohmarkts verarbeitet. Die Anmeldedaten werden technisch in einer Supabase-Datenbank gespeichert. Erst nach Prüfung werden Adresse und Verkaufsangaben in der öffentlichen Standliste angezeigt. Vor- und Nachnamen sowie E-Mail-Adressen bleiben privat und erscheinen dort nicht.</p><p>Wenn die automatische Adresszuordnung aktiviert ist, werden veröffentlichte Standadressen zur Ermittlung der Kartenposition an geocode.maps.co übermittelt. Namen und E-Mail-Adressen werden dabei nicht übertragen. Die Zuordnung basiert auf OpenStreetMap-Daten. Weitere Informationen: <a href="https://geocode.maps.co/terms/" target="_blank" rel="noreferrer">Nutzungsbedingungen und Datenschutz von geocode.maps.co</a>.</p></div></details>
       </div>
     </section>
 
@@ -140,6 +149,8 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase-config.js"></script>
+  <script src="geocoding-config.js"></script>
+  <script src="geocoding-client.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

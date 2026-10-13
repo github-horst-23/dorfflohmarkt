@@ -1,14 +1,18 @@
-const CACHE_NAME = 'dorfflohmarkt-v22';
+const CACHE_NAME = 'dorfflohmarkt-v33';
 const APP_FILES = [
   './',
   './index.html',
   './style.css',
   './app.js',
   './supabase-config.js',
+  './geocoding-config.js',
+  './geocoding-client.js',
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png',
   './marker.png',
+  './marker-favorite.svg',
+  './marker-food.svg',
   './ovd-logo.png'
 ];
 
@@ -30,7 +34,7 @@ self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== self.location.origin) return;
-  if (url.pathname.endsWith('/supabase-config.js')) return;
+  if (url.pathname.endsWith('/supabase-config.js') || url.pathname.endsWith('/geocoding-config.js')) return;
 
   if (request.mode === 'navigate') {
     event.respondWith(fetch(request).then((response) => {
