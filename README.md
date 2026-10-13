@@ -1,35 +1,33 @@
-# Dorfflohmarkt Dudenhofen
+# Dorfflohmarkt Dudenhofen – Veröffentlichung und Installation
 
-Installierbare Web-App für den Dorfflohmarkt in 67373 Dudenhofen. Die App wird als statische Website auf GitHub Pages veröffentlicht; HTTPS ist für die Installation als PWA erforderlich.
+Dieses Paket enthält die aktuelle öffentliche Web-App einschließlich Manifest, Service Worker, Icons, Kartenpins und Supabase-Anbindung. Es ist direkt für GitHub Pages vorbereitet; ein Build oder ein eigener Webserver ist nicht nötig.
 
-## Veröffentlichung auf GitHub Pages
+## Auf GitHub veröffentlichen
 
-1. Entpacke das ZIP und lade die enthaltenen Dateien in das Hauptverzeichnis eines GitHub-Repositories.
-2. Öffne im Repository **Settings → Pages** und veröffentliche den Branch `main` aus dem Stammverzeichnis (`/root`).
-3. Warte, bis GitHub Pages die Website unter `https://<account>.github.io/<repository>/` bereitgestellt hat.
-4. Öffne die HTTPS-Adresse auf dem Smartphone. Android-Browser bieten „Installieren“ an; auf iPhone/iPad nutze im Teilen-Menü „Zum Home-Bildschirm“.
+1. Entpacke `Dorfflohmarkt-PWA-GitHub.zip`.
+2. Lege ein GitHub-Repository an oder öffne das vorhandene Repository der App.
+3. Lade die entpackten Dateien in das Stammverzeichnis des Branches `main` hoch. `index.html`, `sw.js` und `manifest.webmanifest` müssen dort direkt liegen. Lade die Dateien hoch, nicht das ZIP und nicht einen zusätzlichen übergeordneten Ordner. Übernimm die Änderungen mit einem Commit.
+4. Öffne **Settings → Pages**. Wähle unter **Build and deployment** die Quelle **Deploy from a branch**, dann **main** und **/ (root)**. Klicke auf **Save**.
+5. Warte auf die Veröffentlichung und öffne die unter **Settings → Pages** angezeigte HTTPS-Adresse. Für eine Projektseite lautet sie gewöhnlich `https://<github-name>.github.io/<repository>/`.
 
-Die öffentliche Supabase-Projekt-URL und der Publishable Key sind in `supabase-config.js` eingetragen. Dieser Schlüssel ist für die Verwendung im Browser bestimmt. Füge dort niemals einen `service_role`-Key ein.
+Die relative Startadresse und der relative Geltungsbereich im Manifest passen sich dem Repository-Pfad an. Die enthaltene `.nojekyll`-Datei erlaubt die Auslieferung als statische Website.
 
-## Supabase einrichten
+Offizielle Anleitung: [GitHub Pages konfigurieren](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
 
-Für Anmeldungen und Freigaben muss das Supabase-Projekt erreichbar und eingerichtet sein:
+## Als PWA installieren
 
-1. Führe `supabase-setup.sql` einmal im Supabase SQL Editor aus. Bei einem bereits eingerichteten Projekt führe `supabase-event-settings.sql` und `supabase-privacy-hardening.sql` aus, damit der gemeinsame Veranstaltungstermin aktiviert und der öffentliche Datenzugriff auf Kartenfelder begrenzt wird.
-2. Erstelle unter Supabase **Authentication → Users** einen Admin-Benutzer mit E-Mail und Passwort.
-3. Erstelle aus `supabase-admin.sql` eine lokale Datei `supabase-admin.local.sql`, trage dort die Auth-UUID des Admins ein und führe diese lokale Datei im SQL Editor aus. `.gitignore` schließt die lokale Datei vom Git-Upload aus.
-4. Trage die GitHub-Pages-URL in den URL-Einstellungen von Supabase Auth ein.
+- **Android mit Chrome:** Öffne die veröffentlichte HTTPS-Adresse. Nutze „App installieren“ in der App, sobald der Browser den Knopf anbietet, oder die Installationsoption im Browsermenü.
+- **iPhone/iPad:** Öffne die HTTPS-Adresse in Safari. Wähle im Teilen-Menü „Zum Home-Bildschirm“ und bestätige mit „Hinzufügen“. Falls „Als Web-App öffnen“ angeboten wird, aktiviere es. [Anleitung von Apple](https://support.apple.com/de-de/guide/iphone/iphea86e5236/ios).
+- **Computer mit Chrome oder Edge:** Nutze das Installationssymbol in der Adressleiste beziehungsweise die Installationsoption im Browsermenü.
 
-Anmeldungen landen zunächst privat im Status `pending`. Admins melden sich im App-Menü **Admin** an und geben Stände dort frei oder lehnen sie ab. Nur freigegebene Adresse und Angebotsdaten erscheinen öffentlich; Namen und E-Mail bleiben in der privaten Tabelle. Beim Start und wenn die App erneut geöffnet oder wieder online ist, lädt die App die aktuelle veröffentlichte Standliste aus Supabase. Zusätzlich werden Änderungen über Supabase Realtime sofort an geöffnete App-Instanzen übertragen. Beim Start prüft der Service Worker außerdem aktiv auf eine neue App-Version und lädt sie nach der Aktivierung neu.
+Die Installation erfolgt von der veröffentlichten HTTPS-Website. Eine lokal per `file://` geöffnete HTML-Datei bietet diesen Installationsweg nicht. Die App startet nach der Installation in einem eigenen Fenster. Die Darstellung der Installationsoption hängt vom Browser ab.
 
-Das Formular führt keine Geokodierung durch. Freigegebene Stände erscheinen deshalb in der Liste, erhalten jedoch erst dann einen eigenen Karten-Pin, wenn Koordinaten vorhanden sind.
+Weitere Informationen: [Installierbare PWAs bei MDN](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable).
 
-## Lokal ansehen
+## Bestehende Datenanbindung
 
-Mit Python 3:
+Das Paket verwendet das bereits eingerichtete Supabase-Projekt. Anmeldungen, Adminzugang, Veranstaltungstermin und Geocodierung bleiben darüber verbunden. `supabase-config.js` enthält die öffentliche Projekt-URL und den öffentlichen Publishable Key. Der private Schlüssel für geocode.maps.co liegt ausschließlich in Supabase. Für Karte, Geocodierung, Anmeldungen und aktuelle Standdaten wird eine Internetverbindung benötigt.
 
-```sh
-python3 -m http.server 8000
-```
+## Spätere Aktualisierungen
 
-Dann `http://localhost:8000/` öffnen. Für Anmeldung und Adminbereich müssen Internetverbindung und eingerichtetes Supabase-Projekt verfügbar sein.
+Ersetze die geänderten App-Dateien im selben Repository und veröffentliche den Commit. Bei Änderungen an App-Dateien erhöhe die Versionsnummer von `CACHE_NAME` in `sw.js`, damit bereits installierte Apps den neuen Stand übernehmen. Dieses Paket verwendet Version `dorfflohmarkt-v33`.
