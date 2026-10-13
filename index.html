@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#1749a5" />
+  <title>Dorfflohmarkt Dudenhofen</title>
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+</head>
+<body>
+  <header class="topbar">
+    <button class="menu-button" id="menuButton" aria-label="Menü öffnen" aria-expanded="false"><span></span><span></span></button>
+    <a class="brand" href="#karte" aria-label="Dorfflohmarkt Startseite"><img class="brand-logo" src="ovd-logo.png" alt=""><span><strong>DORFFLOHMARKT</strong><small>DUDENHOFEN</small></span></a>
+    <div class="header-actions"><button class="install-button" id="installButton" type="button" hidden>App installieren</button><button class="header-fav" id="header-fav" data-page="favoriten" aria-label="Favoriten öffnen">♡ <span id="favCount">0</span></button></div>
+  </header>
+
+  <nav class="drawer" id="drawer" aria-hidden="true">
+    <div class="drawer-head"><img class="drawer-logo" src="ovd-logo.png" alt="Wappen des Ortsvereins Dudenhofen"><button id="closeMenu" aria-label="Menü schließen">×</button></div>
+    <p class="eyebrow">ENTDECKEN</p>
+    <a href="#karte" class="nav-link active" data-page="karte"><span>⌖</span> Karte &amp; Lageplan</a>
+    <a href="#anmeldung" class="nav-link" data-page="anmeldung"><span>＋</span> Anmeldung</a>
+    <a href="#favoriten" class="nav-link" data-page="favoriten"><span>♡</span> Favoriten <b id="drawerFavCount">0</b></a>
+    <a href="#hinweise" class="nav-link" data-page="hinweise"><span>!</span> Wichtige Hinweise</a>
+    <a href="#admin" class="nav-link" data-page="admin"><span>⌑</span> Admin</a>
+    <div class="drawer-note"><span>♡</span><p>Dein Dorf. Deine Schätze.<br><small>Organisiert vom Ortsverein Dudenhofen</small></p></div>
+  </nav>
+  <div class="scrim" id="scrim"></div>
+
+  <main>
+    <section class="page active" id="page-karte">
+      <div class="hero">
+        <div class="hero-copy"><div class="countdown-badge" role="timer" aria-label="Countdown bis zum Dorfflohmarkt am 1. September 2027"><span class="live-dot"></span><span class="countdown-content"><small>NÄCHSTER DORFFLOHMARKT · 01.09.2027</small><strong id="countdownTimer">Countdown wird geladen …</strong></span></div>
+          <h1>Schätze finden.<br><em>Lieblingsstücke</em><br>weitergeben.</h1>
+          <p>Ein Dorf, viele Höfe und jede Menge Geschichten. Entdecke den Dorfflohmarkt in 67373 Dudenhofen.</p>
+          <a href="#karte-map" class="primary-button">Lageplan entdecken <span>↓</span></a>
+        </div>
+      </div>
+      <div class="content-wrap" id="karte-map">
+        <div class="section-heading"><div><p class="eyebrow">67373 DUDENHOFEN</p><h2>Finde deinen Weg.</h2></div><span class="map-label"><i></i> Dudenhofen, Pfalz</span></div>
+        <div class="map-layout">
+          <div class="map-card"><div class="map-toolbar"><div class="map-search"><span>⌕</span><input id="searchInput" placeholder="Straße oder Stand suchen" aria-label="Straße oder Stand suchen"><button id="clearSearch" aria-label="Suche löschen">×</button></div><button class="filter-button" id="filterButton">☷ <span>Filter</span></button></div>
+            <div class="filters" id="filters"><button class="filter-chip selected" data-filter="Alle">Alle Stände</button><button class="filter-chip" data-filter="Kinder">Kinder</button><button class="filter-chip" data-filter="Kleidung">Kleidung</button><button class="filter-chip" data-filter="Haushalt">Haushalt</button></div>
+            <div class="map-canvas real-map" id="mapCanvas" aria-label="Karte von 67373 Dudenhofen"></div>
+            <div class="map-caption"><span>✳ 67373 Dudenhofen, Rheinland-Pfalz</span><span>Stände erscheinen nach bestätigter Anmeldung</span></div>
+          </div>
+          <aside class="side-panel"><div class="side-title"><div><p class="eyebrow">NUR HIER</p><h3>Flohmarkt in Dudenhofen</h3></div><span class="sparkle">✳</span></div><div class="stat-row"><span class="stat-icon">⌂</span><span><strong id="standCount">0 Stände</strong><small>in 67373 Dudenhofen</small></span></div><div class="stat-row"><span class="stat-icon peach">♡</span><span><strong>Schätze für alle</strong><small>Von Vintage bis Spielzeug</small></span></div><div class="side-divider"></div><p class="side-copy">Der Dorfflohmarkt findet ausschließlich innerhalb von 67373 Dudenhofen statt. Melde deinen Stand im Ort an.</p><button class="secondary-button" data-page="anmeldung">Stand anmelden <span>↗</span></button><div class="organizer"><img class="organizer-logo" src="ovd-logo.png" alt="Wappen des Ortsvereins Dudenhofen"><span><small>MIT LIEBE ORGANISIERT VOM</small><strong>Ortsverein Dudenhofen</strong></span></div></aside>
+        </div>
+        <section class="nearby"><div class="section-heading compact"><div><p class="eyebrow">ANGEMELDETE STÄNDE</p><h2>Hier lohnt sich ein Stopp.</h2></div><span id="resultCount">0 Stände</span></div><div class="stand-grid" id="standGrid"></div><p class="empty-inline" id="noStands">Die Stände für 67373 Dudenhofen werden nach der Anmeldung durch den Ortsverein ergänzt.</p></section>
+      </div>
+    </section>
+
+    <section class="page" id="page-anmeldung"><div class="subpage-hero"><p class="eyebrow">MACH MIT IN 67373 DUDENHOFEN</p><h1>Dein Hof wird<br><em>zum Fundort.</em></h1><p>Mach mit beim Dorfflohmarkt in Dudenhofen und gib deinen Lieblingsstücken ein neues Zuhause.</p></div><div class="form-shell"><div class="form-intro"><span class="form-icon">＋</span><h2>Stand anmelden</h2><p>Der Dorfflohmarkt ist ausschließlich für Stände innerhalb von 67373 Dudenhofen. Teile uns deine Adresse mit.</p><div class="form-steps"><span class="step-active">01</span><i></i><span>02</span><i></i><span>03</span></div><small>Deine Anmeldung ist unverbindlich.</small></div><form id="registrationForm"><div class="form-row"><label>Vorname<input required name="firstName" placeholder="z. B. Anna"></label><label>Nachname<input required name="lastName" placeholder="z. B. Müller"></label></div><label>E-Mail-Adresse<input required type="email" name="email" placeholder="anna@beispiel.de"></label><div class="form-row address-row"><label>Straße und Hausnummer<input id="streetAddress" required name="address" autocomplete="street-address" placeholder="z. B. Musterstraße 12"></label><label>Postleitzahl und Ort<input value="67373 Dudenhofen" readonly aria-readonly="true" class="fixed-location"></label></div><label class="category-title">Was gibt es bei dir?<span class="input-hint">Wähle alles, was passt</span></label><div class="category-options">
+      <label><input type="checkbox" name="category" value="Kleidung (Damen)"><span>Kleidung (Damen)</span></label>
+      <label><input type="checkbox" name="category" value="Kleidung (Herren)"><span>Kleidung (Herren)</span></label>
+      <label><input type="checkbox" name="category" value="Kleidung (Kinder 0–5 Jahre)"><span>Kleidung (Kinder 0–5 Jahre)</span></label>
+      <label><input type="checkbox" name="category" value="Kleidung (Kinder 6–11 Jahre)"><span>Kleidung (Kinder 6–11 Jahre)</span></label>
+      <label><input type="checkbox" name="category" value="Kleidung (Teens 12–18 Jahre)"><span>Kleidung (Teens 12–18 Jahre)</span></label>
+      <label><input type="checkbox" name="category" value="Spielsachen / Bücher (Kinder 0–5 Jahre)"><span>Spielsachen / Bücher (Kinder 0–5 Jahre)</span></label>
+      <label><input type="checkbox" name="category" value="Spielsachen / Bücher (Kinder 6–11 Jahre)"><span>Spielsachen / Bücher (Kinder 6–11 Jahre)</span></label>
+      <label><input type="checkbox" name="category" value="Spielsachen / Bücher (Teens 12–18 Jahre)"><span>Spielsachen / Bücher (Teens 12–18 Jahre)</span></label>
+      <label><input type="checkbox" name="category" value="Spiele / Bücher (Erwachsene)"><span>Spiele / Bücher (Erwachsene)</span></label>
+      <label><input type="checkbox" name="category" value="Musik / Filme / Medien (CD, DVD, Schallplatten, …)"><span>Musik / Filme / Medien (CD, DVD, Schallplatten, …)</span></label>
+      <label><input type="checkbox" name="category" value="Elektronik Kleingeräte"><span>Elektronik Kleingeräte</span></label>
+      <label><input type="checkbox" name="category" value="Elektronik Großgeräte"><span>Elektronik Großgeräte</span></label>
+      <label><input type="checkbox" name="category" value="Fahrräder, Roller, Dreiräder, etc. (Kinder 0–5 Jahre)"><span>Fahrräder, Roller, Dreiräder, etc. (Kinder 0–5 Jahre)</span></label>
+      <label><input type="checkbox" name="category" value="Fahrräder, Roller, etc. (Kinder 6–11 Jahre)"><span>Fahrräder, Roller, etc. (Kinder 6–11 Jahre)</span></label>
+      <label><input type="checkbox" name="category" value="Fahrräder, Roller, etc. (Teens 12–18 Jahre)"><span>Fahrräder, Roller, etc. (Teens 12–18 Jahre)</span></label>
+      <label><input type="checkbox" name="category" value="Fahrräder, Roller, etc. (Erwachsene)"><span>Fahrräder, Roller, etc. (Erwachsene)</span></label>
+      <label><input type="checkbox" name="category" value="Haushaltswaren"><span>Haushaltswaren</span></label>
+      <label><input type="checkbox" name="category" value="Möbel"><span>Möbel</span></label>
+      <label><input type="checkbox" name="category" value="Antiquitäten / Sammlerobjekte"><span>Antiquitäten / Sammlerobjekte</span></label>
+      <label><input type="checkbox" name="category" value="Gartenbedarf"><span>Gartenbedarf</span></label>
+    </div><fieldset class="food-fieldset"><legend>Verpflegung anbieten? <span class="optional">OPTIONAL</span></legend><div class="food-options"><label><input type="radio" name="foodAvailable" value="Ja"><span>Ja</span></label><label><input type="radio" name="foodAvailable" value="Nein"><span>Nein</span></label></div><label class="food-details" id="foodDetails" hidden>Welche Verpflegung bietest du an?<textarea name="foodDescription" id="foodDescription" rows="2" placeholder="z. B. Kaffee, Kuchen, kalte Getränke"></textarea></label></fieldset><label>Ein paar Worte zu deinem Stand <span class="optional">OPTIONAL</span><textarea name="description" rows="3" placeholder="Was können Besucher:innen bei dir entdecken?"></textarea></label><label class="consent"><input required type="checkbox" name="locationConfirmed"><span>Ich bestätige, dass sich mein Stand innerhalb der Ortsgemeinde 67373 Dudenhofen befindet.</span></label><label class="consent"><input required type="checkbox" name="consent"><span>Ich stimme zu, dass meine Angaben zur Organisation des Dorfflohmarkts vom Ortsverein Dudenhofen verarbeitet und technisch in Supabase gespeichert werden.</span></label><button class="primary-button submit-button" type="submit">Anmeldung absenden <span>→</span></button><p class="privacy-note">Deine Anmeldung ist zunächst unverbindlich. Deine Angaben werden zur Prüfung an den Ortsverein übermittelt. Erst nach Freigabe erscheinen die Standdaten in der App.</p></form></div></section>
+
+    <section class="page" id="page-favoriten"><div class="subpage-hero favorites-hero"><p class="eyebrow">DEINE MERKLISTE</p><h1>Das hebst du<br><em>dir auf.</em></h1><p>Deine Lieblingsstände auf einen Blick – damit du am Markttag nichts verpasst.</p></div><div class="content-wrap favorites-content"><div class="section-heading compact"><div><p class="eyebrow">GESPEICHERT</p><h2>Deine Favoriten.</h2></div><span id="favoritesSummary">0 Stände</span></div><div class="stand-grid" id="favoritesGrid"></div><div class="empty-state" id="emptyFavorites"><span>♡</span><h3>Noch nichts vorgemerkt.</h3><p>Entdecke die Stände und tippe auf das Herz, um sie hier zu sammeln.</p><button class="secondary-button" data-page="karte">Stände entdecken <span>→</span></button></div></div></section>
+
+    <section class="page" id="page-hinweise">
+      <div class="subpage-hero notice-hero"><p class="eyebrow">GUT ZU WISSEN</p><h1>Wichtige<br><em>Hinweise.</em></h1><p>Damit der Dorfflohmarkt für alle ein schöner und sicherer Tag wird.</p></div>
+      <div class="content-wrap notice-content">
+        <details class="notice-section" open><summary>Verkauf und Standorte</summary><div class="notice-body"><ul>
+          <li>Der Verkauf findet auf privatem Grund in den Höfen der angemeldeten Häuser statt. Dort verkaufen die Anwohner:innen private, gebrauchte Sachen.</li>
+          <li>Bevor ein Haus einen Stand anmeldet, muss die Eigentümerin oder der Eigentümer die Genehmigung erteilt haben.</li>
+          <li>Gewerblicher Verkauf von Neuware ist nicht erlaubt.</li>
+          <li>Die angemeldete Person trägt für die angegebene Adresse die Verantwortung und stellt die Einhaltung aller Regeln sicher.</li>
+        </ul></div></details>
+        <details class="notice-section"><summary>Verpflegung und Musik</summary><div class="notice-body"><ul>
+          <li>Alkoholische Getränke dürfen ohne eine offiziell erteilte Schanklizenz nicht ausgeschenkt werden.</li>
+          <li>Das Ausschenken alkoholfreier Getränke oder der Verkauf von Selbstgebackenem und Ähnlichem sowie die Einhaltung der Hygiene- und Kennzeichnungspflichten regelt jeder Hof eigenständig. Vom Verkauf kühlpflichtiger Speisen raten wir ab.</li>
+          <li>Um Ärger mit der GEMA zu vermeiden, sollte öffentliches Abspielen von Musik unterbleiben.</li>
+        </ul></div></details>
+        <details class="notice-section"><summary>Zeiten, Verkehr und Wetter</summary><div class="notice-body"><ul>
+          <li>Beginn ist um 10 Uhr. Das Ende ist gegen 16 Uhr; den genauen Schluss regelt jeder Hof selbst.</li>
+          <li>Gehwege, Straßen und Parkplätze sind stets freizuhalten. Menschenansammlungen oder parkende Autos dürfen den Verkehr nicht beeinträchtigen.</li>
+          <li>Markiert eure teilnehmenden Höfe am Flohmarkttag gerne mit Luftballons oder Ähnlichem, damit Besucher:innen den Weg leichter finden.</li>
+          <li>Der Dorfflohmarkt findet bei jedem Wetter statt. Überlegt euch, wie ihr euch vor der Witterung schützen könnt.</li>
+        </ul></div></details>
+        <details class="notice-section"><summary>Anmeldung und Organisation</summary><div class="notice-body"><ul>
+          <li>Für die Übersichtskarte werden Straße, Hausnummer und Warenangebot auf der Website des Ortsvereins Dudenhofen e. V. veröffentlicht.</li>
+          <li>Der Ortsverein erstellt einen Flohmarkt-Flyer mit den bis zum Stichtag angemeldeten Adressen und dem Lageplan als PDF zum Ausdrucken.</li>
+          <li>Der OVD bewirbt den Dorfflohmarkt aktiv in Dudenhofen und im Umland.</li>
+          <li>Anmeldung und Teilnahme sind grundsätzlich kostenfrei. Der Ortsverein Dudenhofen e. V. finanziert und unterstützt die Veranstaltung ehrenamtlich.</li>
+          <li>Für Stornierungen: <a href="mailto:flohmarkt@dudenhofen.org">flohmarkt@dudenhofen.org</a>.</li>
+          <li>Der OVD freut sich über Spenden, damit künftige Aktionen möglich bleiben: <a href="https://www.dudenhofen.org/spenden" target="_blank" rel="noreferrer">www.dudenhofen.org/spenden ↗</a>.</li>
+        </ul></div></details>
+        <details class="notice-section"><summary>Haftung und Sicherheit</summary><div class="notice-body"><ul>
+          <li>Der OVD als Initiator übernimmt keine Haftung für Schäden jeglicher Art. Seitens des OVD besteht kein Versicherungsschutz.</li>
+          <li>Alle Teilnehmenden handeln vollständig auf eigene Rechnung, Haftung und Verantwortung.</li>
+          <li>Sorgt eigenverantwortlich dafür, dass sich im Trubel des Flohmarkts niemand unberechtigt Zugang zu eurem Haus verschafft.</li>
+        </ul></div></details>
+        <details class="notice-section"><summary>Datenschutz</summary><div class="notice-body"><p>Mit Absenden des Formulars erklärt ihr euch damit einverstanden, dass der OVD eure personenbezogenen Daten für die Durchführung des Dorfflohmarkts verarbeitet. Die Anmeldedaten werden technisch in einer Supabase-Datenbank gespeichert. Erst nach Prüfung werden Adresse und Verkaufsangaben in der öffentlichen Standliste angezeigt. Vor- und Nachnamen sowie E-Mail-Adressen bleiben privat und erscheinen dort nicht.</p></div></details>
+      </div>
+    </section>
+
+    <section class="page" id="page-admin">
+      <div class="subpage-hero admin-hero"><p class="eyebrow">VERWALTUNG</p><h1>Admin<br><em>Bereich.</em></h1><p>Anmeldungen prüfen und Stände für die Karte freigeben.</p></div>
+      <div class="content-wrap admin-content">
+        <form id="adminLoginForm" class="admin-panel admin-login"><h2>Admin-Anmeldung</h2><p>Bitte mit dem eingerichteten Supabase-Adminzugang anmelden.</p><label>E-Mail-Adresse<input required type="email" name="email" autocomplete="username"></label><label>Passwort<input required type="password" name="password" autocomplete="current-password"></label><button class="primary-button" type="submit">Anmelden <span>→</span></button><p class="admin-message" id="adminLoginMessage" aria-live="polite"></p></form>
+        <div id="adminDashboard" class="admin-panel" hidden><div class="admin-toolbar"><div><p class="eyebrow">ANMELDUNGEN</p><h2>Prüfung &amp; Freigabe</h2></div><button id="adminLogout" class="secondary-button" type="button">Abmelden</button></div><p id="adminMessage" class="admin-message" aria-live="polite"></p><div id="adminApplications" class="admin-applications"></div></div>
+      </div>
+    </section>
+  </main>
+  <footer><a class="brand" href="#karte"><img class="brand-logo" src="ovd-logo.png" alt=""><span><strong>DORFFLOHMARKT</strong><small>DUDENHOFEN</small></span></a><span>Mit ❤️ vom Ortsverein Dudenhofen</span><a href="mailto:flohmarkt@dudenhofen.org">Kontakt ↗</a></footer>
+  <div class="toast" id="toast" role="status"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
