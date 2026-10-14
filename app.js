@@ -9,10 +9,13 @@ const supabaseConfig=window.DORFFLOHMARKT_SUPABASE||{};
 const supabaseClient=window.supabase?.createClient&&supabaseConfig.url&&supabaseConfig.anonKey?window.supabase.createClient(supabaseConfig.url,supabaseConfig.anonKey):null;
 const getFavs=()=>{try{const saved=JSON.parse(localStorage.getItem('dorfflohmarkt-favs')||'[]');return Array.isArray(saved)?[...new Set(saved.filter(id=>typeof id==='string').map(id=>legacyStandIds[id]||id))]:[]}catch{return []}};
 let favorites=getFavs(),activeFilter='Alle',search='';
+const favoriteRouter=window.createFavoriteRouter();
+const favoriteRouteState={signature:'',controller:null,busy:false};
 const featureFilters={favorites:false,food:false};
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const adminManualForm=$('#registrationForm').cloneNode(true);
 adminManualForm.id='adminManualForm';
+adminManualForm.hidden=false;
 adminManualForm.classList.add('admin-manual-form');
 adminManualForm.querySelectorAll('[required]').forEach(field=>field.required=false);
 adminManualForm.querySelectorAll('.required-note').forEach(note=>note.remove());
@@ -76,18 +79,19 @@ function streetAddress(address,fallback='Standadresse folgt'){
   return String(address||'').split(',')[0].replace(/\s*\b\d{5}\b.*$/,'').trim()||fallback;
 }
 function localStandAddress(address){const street=streetAddress(address,'');return street?`${street}, 67373 Dudenhofen`:'67373 Dudenhofen'}
-function card(s){
+function card(s,expanded=false){
   const liked=favorites.includes(s.id),heading=streetAddress(s.address);
-  return `<article class="stand-card"><div class="stand-card-top"><h3>${escapeHtml(heading)}</h3><button class="favorite-toggle ${liked?'active':''}" data-fav="${escapeHtml(s.id)}" aria-label="${liked?'Aus Favoriten entfernen':'Zu Favoriten hinzufügen'}: ${escapeHtml(heading)}">${liked?'★':'☆'}</button></div><div class="tag-row">${(s.categories||[]).map(c=>`<span class="tag">${escapeHtml(c)}</span>`).join('')}</div>${s.description?`<p class="card-desc">${escapeHtml(s.description)}</p>`:''}${s.food_available==='Ja'&&s.food_description?`<p class="card-desc"><strong>Verpflegung:</strong> ${escapeHtml(s.food_description)}</p>`:''}</article>`;
+  return `<article class="stand-card"><div class="stand-card-top"><h3>${escapeHtml(heading)}</h3><button class="favorite-toggle ${liked?'active':''}" data-fav="${escapeHtml(s.id)}" aria-label="${liked?'Aus Favoriten entfernen':'Zu Favoriten hinzufügen'}: ${escapeHtml(heading)}">${liked?'★':'☆'}</button></div><div class="tag-row">${(s.categories||[]).map(c=>`<span class="tag">${escapeHtml(c)}</span>`).join('')}</div>${s.food_available==='Ja'&&s.food_description?`<p class="card-desc"><strong>Verpflegung:</strong> ${escapeHtml(s.food_description)}</p>`:''}<details class="stand-public-details" data-stand-id="${escapeHtml(s.id)}" ${expanded?'open':''}><summary>Standdetails</summary><dl><dt>Standort</dt><dd>${escapeHtml(localStandAddress(s.address))}</dd><dt>Alle Angebote</dt><dd>${(s.categories||[]).length?`<ul>${s.categories.map(category=>`<li>${escapeHtml(category)}</li>`).join('')}</ul>`:'Keine Angaben.'}</dd><dt>Verpflegung</dt><dd>${s.food_available==='Ja'?escapeHtml(s.food_description||'Verpflegung wird angeboten.'):'Keine Verpflegung.'}</dd><dt>Weitere Informationen</dt><dd>${escapeHtml(s.description||'Keine weiteren Angaben.')}</dd></dl></details></article>`;
 }
 function renderStands(){
+  const expanded=new Set($$('.stand-public-details[open]').map(element=>element.dataset.standId));
   const visible=stands.filter(matches);
-  $('#standGrid').innerHTML=visible.map(card).join('');
+  $('#standGrid').innerHTML=visible.map(stand=>card(stand,expanded.has(stand.id))).join('');
   $('#noStands').hidden=visible.length>0;
   $('#noStands').textContent=stands.length?'Keine Stände für diese Auswahl gefunden.':'Noch keine Stände angemeldet.';
   $('#resultCount').textContent=`${visible.length} ${visible.length===1?'Stand':'Stände'}`;
   const favs=favorites.map(id=>stands.find(s=>s.id===id)).filter(Boolean);
-  $('#favoritesGrid').innerHTML=favs.map(card).join('');
+  $('#favoritesGrid').innerHTML=favs.map(stand=>card(stand,expanded.has(stand.id))).join('');
   $('#emptyFavorites').classList.toggle('visible',favs.length===0);
   $('#favoritesGrid').style.display=favs.length?'grid':'none';
   renderFavoriteRoute(favs);
@@ -99,9 +103,92 @@ function renderStands(){
   }));
   renderCounts();refreshStandPins();
 }
-function renderFavoriteRoute(favs){const link=$('#planFavoritesRoute'),message=$('#routePlannerMessage');const destinations=favs.map(stand=>String(stand.address||'').trim()).filter(Boolean).map(localStandAddress);if(!destinations.length){link.removeAttribute('href');link.setAttribute('aria-disabled','true');message.textContent=favs.length?'Für deine Favoriten ist keine Adresse verfügbar.':'Speichere Stände mit Adresse, um eine Route zu planen.';return}const destination=destinations.at(-1),waypoints=destinations.slice(0,-1),url=new URL('https://www.google.com/maps/dir/');url.searchParams.set('api','1');url.searchParams.set('destination',destination);url.searchParams.set('travelmode','walking');if(waypoints.length)url.searchParams.set('waypoints',waypoints.join('|'));link.href=url.toString();link.setAttribute('aria-disabled','false');message.textContent=`${destinations.length} ${destinations.length===1?'Stand':'Stände'} in deiner gespeicherten Reihenfolge. Google Maps plant die Route zu Fuß.`}
+function currentRouteFavorites(){return favorites.map(id=>stands.find(stand=>stand.id===id)).filter(Boolean)}
+function routeSignature(favs){return JSON.stringify(favs.map(stand=>[stand.id,stand.address]))}
+function renderFavoriteRoute(favs){
+  const button=$('#planFavoritesRoute'),message=$('#routePlannerMessage');
+  const signature=routeSignature(favs);
+  if(signature!==favoriteRouteState.signature){
+    favoriteRouteState.controller?.abort();
+    favoriteRouteState.controller=null;favoriteRouteState.busy=false;
+    favoriteRouteState.signature=signature;
+    $('#favoriteRouteResult').hidden=true;$('#favoriteRouteResult').replaceChildren();
+    message.textContent=favs.length?'Die Reihenfolge wird ab deinem aktuellen Standort für Fußwege optimiert.':'Speichere Stände, um eine Route zu planen.';
+    button.textContent='Route planen';
+  }
+  button.disabled=!favs.length||favoriteRouteState.busy;
+  button.setAttribute('aria-busy',String(favoriteRouteState.busy));
+}
+function walkingTime(seconds){return `${Math.max(1,Math.ceil(seconds/60))} Min.`}
+function walkingDistance(meters){return meters<1000?`${Math.round(meters/10)*10} m`:`${(meters/1000).toLocaleString('de-DE',{maximumFractionDigits:1})} km`}
+function mapsWalkingURL(origin,stops){
+  const url=new URL('https://www.google.com/maps/dir/');
+  const coordinate=point=>`${point.lat.toFixed(6)},${point.lng.toFixed(6)}`;
+  url.searchParams.set('api','1');url.searchParams.set('travelmode','walking');
+  url.searchParams.set('destination',coordinate(stops.at(-1)));
+  if(origin)url.searchParams.set('origin',coordinate(origin));
+  if(stops.length>1)url.searchParams.set('waypoints',stops.slice(0,-1).map(coordinate).join('|'));
+  return url.toString();
+}
+function showFavoriteRoute(result){
+  const host=$('#favoriteRouteResult'),{origin,legs,exact}=result;
+  const time=new Date(origin.timestamp).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+  const precision=Number.isFinite(origin.accuracy)&&origin.accuracy>100?` Standortgenauigkeit: ca. ${Math.round(origin.accuracy)} m.`:'';
+  // Each segment has at most three intermediate stops, including on mobile.
+  // Individual navigation links remain available for every stop on all devices.
+  const segments=[];
+  for(let start=0;start<legs.length;start+=4){
+    const portion=legs.slice(start,start+4),from=start?legs[start-1].stop:origin;
+    const label=legs.length<=4?'Route in Google Maps öffnen':`Etappe ${segments.length+1}: Stopps ${start+1}–${start+portion.length}`;
+    segments.push(`<a class="secondary-button" href="${escapeHtml(mapsWalkingURL(from,portion.map(leg=>leg.stop)))}" target="_blank" rel="noopener noreferrer">${label} <span aria-hidden="true">↗</span></a>`);
+  }
+  host.innerHTML=`<h2>Deine Fußroute</h2><p class="route-total"><strong>${walkingDistance(result.distance)} · ca. ${walkingTime(result.duration)}</strong> reine Gehzeit</p><p>Start: dein Standort um ${time} Uhr.${precision} Ende am letzten Stand, ohne Rückweg.</p><p>${exact?'Die Reihenfolge hat die geringste berechnete Gehzeit für alle Favoriten.':'Die Reihenfolge wurde für alle Favoriten optimiert. Bei mehr als 16 Stopps ist sie eine Näherung, ohne Garantie auf das globale Optimum.'}</p><ol class="route-stop-list">${legs.map(leg=>`<li><div><strong>${escapeHtml(streetAddress(leg.stop.address))}</strong><small>${walkingDistance(leg.distance)} · ca. ${walkingTime(leg.duration)} ab dem vorherigen Stopp${leg===legs[0]?' (dein Standort)':''}</small></div><a href="${escapeHtml(mapsWalkingURL(null,[leg.stop]))}" target="_blank" rel="noopener noreferrer" aria-label="Zu ${escapeHtml(streetAddress(leg.stop.address))} in Google Maps navigieren">Navigieren <span aria-hidden="true">↗</span></a></li>`).join('')}</ol><div class="route-segments">${segments.join('')}</div><p class="route-navigation-note">Folge der angezeigten Reihenfolge. Google Maps kann Wege anders berechnen; falls Zwischenstopps dort fehlen, nutze „Navigieren“ am jeweiligen Stand. Mit „Neu planen“ startet die Berechnung an deinem dann aktuellen Standort.</p><p class="route-credit">Fußwege: <a href="https://routing.openstreetmap.de/about.html" target="_blank" rel="noopener noreferrer">FOSSGIS / OSRM</a> · © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap-Mitwirkende</a> · <a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noopener noreferrer">Karte verbessern</a></p>`;
+  host.hidden=false;
+}
+$('#planFavoritesRoute').addEventListener('click',async()=>{
+  if(favoriteRouteState.busy)return;
+  const favs=currentRouteFavorites();if(!favs.length)return;
+  const controller=new AbortController(),{signal}=controller;
+  favoriteRouteState.controller=controller;favoriteRouteState.busy=true;
+  const message=$('#routePlannerMessage'),button=$('#planFavoritesRoute');
+  $('#favoriteRouteResult').hidden=true;$('#favoriteRouteResult').replaceChildren();
+  button.textContent='Wird geplant …';renderFavoriteRoute(favs);
+  const status=text=>{if(!signal.aborted)message.textContent=text};
+  try{
+    if(navigator.onLine===false)throw new Error('Die Routenplanung benötigt eine Internetverbindung.');
+    if(favs.length>99)throw new Error('Bitte wähle höchstens 99 Favoriten für eine Route aus. Es werden keine Stopps automatisch ausgelassen.');
+    status('Dein aktueller Standort wird angefragt …');
+    const origin=await favoriteRouter.getLocation();signal.throwIfAborted();
+    const hasPosition=stand=>Number.isFinite(stand.lat)&&Number.isFinite(stand.lng)&&
+      (stand.geocodingSource!=='maps-co'||stand.geocodingExpiresAt>Date.now());
+    if(favs.some(stand=>!hasPosition(stand))){
+      status('Fehlende Standpositionen werden ermittelt …');
+      // The map may already have a lookup running. Give its result time to arrive.
+      const lookup=locateStandAddresses(favs,{retry:true});
+      const deadline=Date.now()+20000;
+      while(currentRouteFavorites().some(stand=>!hasPosition(stand))&&Date.now()<deadline){
+        signal.throwIfAborted();
+        await new Promise(resolve=>setTimeout(resolve,250));
+      }
+      // The geocoder catches provider errors itself; do not block on a slow call.
+      void lookup;
+    }
+    signal.throwIfAborted();
+    const stops=currentRouteFavorites();
+    const missing=stops.filter(stand=>!hasPosition(stand)||!streetAddress(stand.address,''));
+    if(missing.length)throw new Error(`Für diese Favoriten fehlt eine genaue Standposition: ${missing.map(stand=>streetAddress(stand.address)).join(', ')}. Bitte aktualisieren und erneut planen. Es wurde kein Stand ausgelassen.`);
+    const result=await favoriteRouter.plan({origin,stops:stops.map(stand=>({...stand})),signal,onProgress:status});
+    signal.throwIfAborted();showFavoriteRoute(result);
+    status(`${stops.length} ${stops.length===1?'Favorit':'Favoriten'} ab deinem aktuellen Standort eingeplant. Die Reihenfolge steht unten.`);
+    button.textContent='Neu planen';
+  }catch(error){
+    if(!signal.aborted){status(error.message||'Die Route konnte nicht berechnet werden. Bitte erneut versuchen.');button.textContent='Erneut planen'}
+  }finally{
+    if(favoriteRouteState.controller===controller){favoriteRouteState.busy=false;favoriteRouteState.controller=null;renderFavoriteRoute(currentRouteFavorites())}
+  }
+});
 function toast(text){const t=$('#toast');t.textContent=text;t.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.classList.remove('show'),2600)}
-function showPage(name){const page=['karte','anmeldung','favoriten','hinweise','admin'].includes(name)?name:'karte';$$('.page').forEach(p=>p.classList.toggle('active',p.id===`page-${page}`));$$('.nav-link').forEach(a=>a.classList.toggle('active',a.dataset.page===page));closeDrawer();window.scrollTo({top:0,behavior:'smooth'});if(page==='karte'&&townMap)setTimeout(()=>townMap.invalidateSize(),80);if(page==='admin')refreshAdmin();location.hash=page}
+function showPage(name){const page=['karte','anmeldung','favoriten','hinweise','admin'].includes(name)?name:'karte';$$('.page').forEach(p=>p.classList.toggle('active',p.id===`page-${page}`));$$('.nav-link').forEach(a=>a.classList.toggle('active',a.dataset.page===page));closeDrawer();window.scrollTo({top:0,behavior:'smooth'});if(page==='karte'&&townMap)setTimeout(()=>townMap.invalidateSize(),80);if(page==='admin')refreshAdmin();if(page==='anmeldung')loadEventSettings();location.hash=page}
 const drawer=$('#drawer'),scrim=$('#scrim');function openDrawer(){drawer.classList.add('open');scrim.classList.add('show');drawer.setAttribute('aria-hidden','false');$('#menuButton').setAttribute('aria-expanded','true');refreshPendingApplicationCount()}function closeDrawer(){drawer.classList.remove('open');scrim.classList.remove('show');drawer.setAttribute('aria-hidden','true');$('#menuButton').setAttribute('aria-expanded','false')}
 $('#menuButton').addEventListener('click',openDrawer);$('#closeMenu').addEventListener('click',closeDrawer);scrim.addEventListener('click',closeDrawer);$$('[data-page]').forEach(el=>el.addEventListener('click',e=>{e.preventDefault();showPage(el.dataset.page)}));$$('.brand[href="#karte"],.hero .primary-button').forEach(el=>el.addEventListener('click',e=>{if(el.classList.contains('brand')){e.preventDefault();showPage('karte')}else{e.preventDefault();document.querySelector('#karte-map').scrollIntoView({behavior:'smooth'})}}));
 $('#organizerHomepage').addEventListener('click',event=>{
@@ -139,16 +226,35 @@ $('#searchInput').addEventListener('input',e=>{search=e.target.value.trim().toLo
 $('#registrationForm').addEventListener('submit',async e=>{
   e.preventDefault();
   const form=e.currentTarget;
+  if(registrationSubmitted||form.dataset.submitting==='true')return;
   if(!form.reportValidity())return;
   if(!supabaseClient){toast('Die Anmeldung ist noch nicht verfügbar: Supabase ist nicht eingerichtet.');return}
+  await loadEventSettings();
+  if(registrationSubmitted||form.dataset.submitting==='true')return;
+  if(registrationOpen!==true&&!(registrationOpen===false&&lateRegistrationToken)){toast(registrationOpen===false?'Bitte zuerst einen gültigen Nachzügler-Token eingeben.':'Die Anmeldung ist gerade nicht verfügbar. Bitte später erneut versuchen.');return}
   const data=new FormData(form);
   const categories=data.getAll('category');
   const otherOffer=data.get('otherOffer')?.trim();
   if(otherOffer)categories.push(`Sonstiges: ${otherOffer}`);
   if(!categories.length){const firstGroup=$('.category-group');if(firstGroup){firstGroup.open=true;firstGroup.querySelector('summary').focus();firstGroup.scrollIntoView({behavior:'smooth',block:'center'})}toast('Bitte wähle mindestens ein Verkaufsangebot aus.');return}
   const application={first_name:data.get('firstName'),last_name:data.get('lastName'),email:data.get('email'),address:localStandAddress(data.get('address')),categories,food_available:data.get('foodAvailable')||'Nein',food_description:data.get('foodDescription')||'',description:data.get('description')||'',status:'pending'};
-  const {error}=await supabaseClient.from('stand_registrations').insert(application);
-  if(error){toast('Die Anmeldung konnte nicht gesendet werden. Bitte versuche es später erneut.');return}
+  if(registrationOpen===false)application.late_registration_token=lateRegistrationToken;
+  const submitButton=form.querySelector('.submit-button');
+  form.dataset.submitting='true';submitButton.disabled=true;
+  let error;
+  try{({error}=await supabaseClient.from('stand_registrations').insert(application))}
+  catch{error={message:'unavailable'}}
+  finally{form.dataset.submitting='false';submitButton.disabled=false}
+  if(error){
+    if(error.message?.includes('late_token_invalid_or_used')){lateRegistrationToken='';renderRegistrationAvailability();$('#lateTokenMessage').textContent='Der Token ist ungültig oder wurde bereits verwendet. Bitte einen neuen Token beim Ortsverein anfragen.';toast('Der Token ist ungültig oder bereits verwendet.')}
+    else if(error.message?.includes('late_tokens_closed_only')){await loadEventSettings();toast('Die Anmeldung ist wieder geöffnet. Bitte erneut absenden.')}
+    else if(error.message?.includes('registrations_closed')){await loadEventSettings();toast('Zurzeit werden Anmeldungen nur mit Nachzügler-Token angenommen.')}
+    else toast('Die Anmeldung konnte nicht gesendet werden. Bitte versuche es später erneut.');
+    return;
+  }
+  registrationSubmitted=true;
+  lateRegistrationToken='';$('#lateTokenInput').value='';
+  renderRegistrationAvailability();
   refreshPendingApplicationCount();
   const name=escapeHtml(application.first_name);
   form.innerHTML=`<div class="success-state"><span class="success-icon">✓</span><p class="eyebrow">ANMELDUNG EINGEGANGEN</p><h2>Danke, ${name}!</h2><p>Deine Anmeldung wurde an den Ortsverein übermittelt. Sobald ein Admin sie geprüft und freigegeben hat, erscheint dein Stand in der Karte.</p><button class="secondary-button" type="button" id="backToMap">Zur Karte <span>↗</span></button></div>`;
@@ -165,7 +271,7 @@ function syncFoodDetails(form){
 }
 $$('[name="foodAvailable"]').forEach(radio=>radio.addEventListener('change',()=>syncFoodDetails(radio.closest('form'))));
 syncFoodDetails($('#registrationForm'));syncFoodDetails(adminManualForm);
-window.addEventListener('hashchange',()=>{const name=location.hash.slice(1);if(['karte','anmeldung','favoriten','hinweise','admin'].includes(name)){$$('.page').forEach(p=>p.classList.toggle('active',p.id===`page-${name}`));$$('.nav-link').forEach(a=>a.classList.toggle('active',a.dataset.page===name));if(name==='karte'&&townMap)setTimeout(()=>townMap.invalidateSize(),80);if(name==='admin')refreshAdmin()}});
+window.addEventListener('hashchange',()=>{const name=location.hash.slice(1);if(['karte','anmeldung','favoriten','hinweise','admin'].includes(name)){$$('.page').forEach(p=>p.classList.toggle('active',p.id===`page-${name}`));$$('.nav-link').forEach(a=>a.classList.toggle('active',a.dataset.page===name));if(name==='karte'&&townMap)setTimeout(()=>townMap.invalidateSize(),80);if(name==='admin')refreshAdmin();if(name==='anmeldung')loadEventSettings()}});
 if(['#anmeldung','#favoriten','#hinweise','#admin'].includes(location.hash)){const p=location.hash.slice(1);$$('.page').forEach(x=>x.classList.toggle('active',x.id===`page-${p}`))}
 let townMap=null;
 let makeMapPin=null;
@@ -201,7 +307,26 @@ if(window.L){
 }
 function updateMapStandCount(){
   const count=townMap?standPinMarkers.length:0;
-  $('#standCount').textContent=`${count} ${count===1?'Stand':'Stände'}`;
+  $('#standCount').textContent=String(count);
+  const selection=stands.filter(matches);
+  $('#standSelectionCount').textContent=String(selection.length);
+  $('#standFoodCount').textContent=String(selection.filter(stand=>stand.food_available==='Ja').length);
+  $('#standFavoriteSelectionCount').textContent=String(selection.filter(stand=>favorites.includes(stand.id)).length);
+  const offers=new Map();
+  for(const stand of selection){
+    const counted=new Set();
+    for(const category of stand.categories||[]){
+      const label=String(category).trim().replace(/\s+/g,' '),key=label.toLocaleLowerCase('de');
+      if(!label||counted.has(key))continue;
+      counted.add(key);
+      const entry=offers.get(key)||{label,count:0};
+      entry.count++;offers.set(key,entry);
+    }
+  }
+  const ranked=[...offers.values()].sort((a,b)=>b.count-a.count||a.label.localeCompare(b.label,'de'));
+  $('#standOffers').innerHTML=ranked.slice(0,6).map(offer=>`<li><span>${escapeHtml(offer.label)}</span><strong>${offer.count} ${offer.count===1?'Stand':'Stände'}</strong><span class="stand-offer-bar" aria-hidden="true"><i style="width:${Math.round(offer.count/selection.length*100)}%"></i></span></li>`).join('');
+  const further=ranked.length>6?`${ranked.length-6} weitere ${ranked.length===7?'Warengruppe':'Warengruppen'}. `:'';
+  $('#standOffersNote').textContent=ranked.length?`${further}Ein Stand kann mehrere Angebote haben.`:selection.length?'Für diese Stände sind noch keine Angebote eingetragen.':'Keine Angebote in dieser Auswahl.';
 }
 function refreshStandPins(){
   if(!townMap||!makeMapPin){updateMapStandCount();return}
@@ -327,15 +452,107 @@ let adminPublishedSignature='';
 let adminSessionId=null,adminSessionVersion=0;
 const eventDateForm=$('#eventDateForm');
 const eventDateMessage=$('#eventDateMessage');
-function adminStatus(target,message){target.textContent=message}
-async function loadEventDate(){
-  if(!supabaseClient)return;
-  const {data,error}=await supabaseClient.from('event_settings').select('event_date').eq('id',true).maybeSingle();
-  if(error||!data?.event_date){adminStatus(eventDateMessage,'Die Termineinstellung ist noch nicht eingerichtet. Bitte supabase-event-settings.sql in Supabase ausführen.');return}
-  setMarketDate(data.event_date);
+let registrationOpen=null,registrationSaving=false,registrationSubmitted=false,eventSettingsSequence=0;
+let lateRegistrationToken='',lateTokenChecking=false,lateTokenCreating=false;
+const registrationToggle=$('#registrationToggle');
+function renderRegistrationAvailability(){
+  const notice=$('#registrationAvailability'),form=$('#registrationForm');
+  if(registrationOpen===true){lateRegistrationToken='';$('#lateTokenInput').value='';}
+  const tokenAccess=registrationOpen===false&&Boolean(lateRegistrationToken);
+  notice.hidden=registrationSubmitted||registrationOpen===true;
+  notice.textContent=tokenAccess?'Dein Nachzügler-Token ist freigeschaltet. Er wird erst beim erfolgreichen Absenden verbraucht.':registrationOpen===false?'Die reguläre Anmeldung ist geschlossen. Mit einem Nachzügler-Token vom Ortsverein kannst du dich noch einmalig anmelden.':'Die Anmeldung ist gerade nicht verfügbar. Bitte später erneut versuchen.';
+  form.hidden=!registrationSubmitted&&registrationOpen!==true&&!tokenAccess;
+  $('#lateTokenForm').hidden=registrationSubmitted||registrationOpen!==false||tokenAccess;
+  $('#createLateToken').disabled=lateTokenCreating||registrationOpen!==false;
+  $('#lateTokenAdminStatus').textContent=lateTokenCreating?'Token wird erzeugt …':registrationOpen===false?'Einmalige Tokens können jetzt erzeugt werden.':'Tokens können nur bei geschlossener Anmeldung erzeugt werden.';
+  registrationToggle.disabled=registrationSaving||registrationOpen===null;
+  registrationToggle.setAttribute('aria-checked',String(registrationOpen===true));
+  $('#registrationSettingsStatus').textContent=registrationSaving?'Einstellung wird gespeichert …':registrationOpen===null?'Die Einstellung konnte nicht geladen werden. Bitte aktualisieren.':registrationOpen?'Neue Anmeldungen werden angenommen.':'Die Annahme neuer Anmeldungen ist ausgeschaltet.';
 }
-loadEventDate();
-supabaseClient?.channel('event-date-live').on('postgres_changes',{event:'UPDATE',schema:'public',table:'event_settings'},payload=>setMarketDate(payload.new.event_date)).subscribe();
+$('#lateTokenForm').addEventListener('submit',async event=>{
+  event.preventDefault();
+  if(lateTokenChecking||!supabaseClient||!event.currentTarget.reportValidity())return;
+  const button=event.currentTarget.querySelector('button');
+  lateTokenChecking=true;button.disabled=true;
+  const message=$('#lateTokenMessage');message.textContent='Token wird geprüft …';
+  try{
+    await loadEventSettings();
+    if(registrationOpen!==false){message.textContent='Die reguläre Anmeldung ist geöffnet; du benötigst keinen Token.';return}
+    const token=$('#lateTokenInput').value.trim().toUpperCase();
+    const {data,error}=await supabaseClient.rpc('validate_late_registration_token',{p_token:token});
+    if(error){message.textContent='Der Token konnte gerade nicht geprüft werden. Bitte erneut versuchen.';return}
+    if(data!==true){message.textContent='Der Token ist ungültig oder wurde bereits verwendet.';return}
+    lateRegistrationToken=token;message.textContent='';renderRegistrationAvailability();
+    $('#registrationForm').querySelector('input').focus();
+  }catch{message.textContent='Der Token konnte gerade nicht geprüft werden. Bitte erneut versuchen.'}
+  finally{lateTokenChecking=false;button.disabled=false}
+});
+$('#createLateToken').addEventListener('click',async()=>{
+  if(lateTokenCreating||registrationOpen!==false||!supabaseClient)return;
+  lateTokenCreating=true;renderRegistrationAvailability();
+  const sessionVersion=adminSessionVersion;
+  try{
+    const {data,error}=await supabaseClient.rpc('create_late_registration_token');
+    if(sessionVersion!==adminSessionVersion||adminDashboard.hidden)return;
+    if(error||typeof data!=='string'){
+      if(error?.message?.includes('late_tokens_closed_only')){await loadEventSettings();toast('Tokens sind nur bei geschlossener Anmeldung verfügbar.')}
+      else toast('Der Token konnte nicht erzeugt werden. Bitte Adminzugriff und Verbindung prüfen.');
+      return;
+    }
+    $('#generatedLateToken').value=data;$('#lateTokenOutput').hidden=false;
+    toast('Einmaligen Token erzeugt. Bitte jetzt kopieren.');
+  }catch{toast('Der Token konnte gerade nicht erzeugt werden.')}
+  finally{lateTokenCreating=false;renderRegistrationAvailability()}
+});
+$('#copyLateToken').addEventListener('click',async()=>{
+  const field=$('#generatedLateToken');
+  try{await navigator.clipboard.writeText(field.value);toast('Token kopiert.')}
+  catch{field.focus();field.select();toast('Bitte den markierten Token kopieren.')}
+});
+function applyEventSettings(settings){
+  if(settings?.event_date)setMarketDate(settings.event_date);
+  registrationOpen=typeof settings?.registrations_open==='boolean'?settings.registrations_open:null;
+  renderRegistrationAvailability();
+}
+function adminStatus(target,message){target.textContent=message}
+async function loadEventSettings(){
+  const sequence=++eventSettingsSequence;
+  if(!supabaseClient){applyEventSettings(null);return}
+  try{
+    const {data,error}=await supabaseClient.from('event_settings').select('event_date,registrations_open').eq('id',true).maybeSingle();
+    if(sequence!==eventSettingsSequence)return;
+    if(error||!data){applyEventSettings(null);return}
+    applyEventSettings(data);
+  }catch{if(sequence===eventSettingsSequence)applyEventSettings(null)}
+}
+loadEventSettings();
+const eventSettingsBroadcast='BroadcastChannel' in window?new BroadcastChannel('dorfflohmarkt-event-settings'):null;
+eventSettingsBroadcast?.addEventListener('message',()=>loadEventSettings());
+supabaseClient?.channel('event-settings-live')
+  .on('postgres_changes',{event:'UPDATE',schema:'public',table:'event_settings',filter:'id=eq.true'},payload=>{
+    eventSettingsSequence++;applyEventSettings(payload.new);loadEventSettings();
+  })
+  .subscribe(status=>{
+    if(['SUBSCRIBED','CHANNEL_ERROR','TIMED_OUT','CLOSED'].includes(status))loadEventSettings();
+  });
+window.addEventListener('online',loadEventSettings);
+window.addEventListener('pageshow',loadEventSettings);
+window.addEventListener('focus',loadEventSettings);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')loadEventSettings()});
+setInterval(()=>{if(document.visibilityState==='visible'&&navigator.onLine)loadEventSettings()},5000);
+registrationToggle.addEventListener('click',async()=>{
+  if(registrationSaving||registrationOpen===null||!supabaseClient)return;
+  const next=!registrationOpen;
+  registrationSaving=true;renderRegistrationAvailability();
+  try{
+    const {data,error}=await supabaseClient.from('event_settings').update({registrations_open:next}).eq('id',true).select('event_date,registrations_open').maybeSingle();
+    if(error||!data)throw new Error('Save failed');
+    eventSettingsSequence++;applyEventSettings(data);
+    eventSettingsBroadcast?.postMessage({changed:true});
+    toast(next?'Anmeldungen sind jetzt geöffnet.':'Anmeldungen sind jetzt geschlossen.');
+  }catch{toast('Die Einstellung konnte nicht gespeichert werden. Bitte Adminzugriff und Verbindung prüfen.')}
+  finally{registrationSaving=false;renderRegistrationAvailability()}
+});
 eventDateForm.addEventListener('submit',async event=>{
   event.preventDefault();
   const value=new FormData(eventDateForm).get('eventDate');
@@ -344,6 +561,7 @@ eventDateForm.addEventListener('submit',async event=>{
   const {error}=await supabaseClient.from('event_settings').update({event_date:value}).eq('id',true);
   if(error){adminStatus(eventDateMessage,'Speichern fehlgeschlagen. Bitte prüfen, ob supabase-event-settings.sql ausgeführt wurde.');return}
   setMarketDate(value);
+  eventSettingsBroadcast?.postMessage({changed:true});
   adminStatus(eventDateMessage,'Termin gespeichert. Countdown und Startseite wurden aktualisiert.');
 });
 adminManualForm.addEventListener('submit',async event=>{
@@ -379,10 +597,10 @@ adminManualForm.addEventListener('submit',async event=>{
 async function refreshAdmin(){
   if(!supabaseClient){adminStatus(adminLoginMessage,'Supabase ist noch nicht eingerichtet.');return}
   const {data:{session}}=await supabaseClient.auth.getSession();
-  if(adminSessionId!==(session?.user.id||null)){adminSessionId=session?.user.id||null;adminSessionVersion++;pendingCountSequence++;}
+  if(adminSessionId!==(session?.user.id||null)){adminSessionId=session?.user.id||null;adminSessionVersion++;pendingCountSequence++;$('#generatedLateToken').value='';$('#lateTokenOutput').hidden=true;}
   adminLoginForm.hidden=Boolean(session);adminDashboard.hidden=!session;
-  if(session){loadApplications();loadAdminPublishedStands();loadEventDate()}
-  else{setPendingApplicationCount(null);adminApplications.innerHTML=''}
+  if(session){loadApplications();loadAdminPublishedStands();loadEventSettings()}
+  else{setPendingApplicationCount(null);adminApplications.innerHTML='';$('#generatedLateToken').value='';$('#lateTokenOutput').hidden=true}
 }
 adminLoginForm.addEventListener('submit',async e=>{
   e.preventDefault();if(!supabaseClient){adminStatus(adminLoginMessage,'Supabase ist noch nicht eingerichtet.');return}
@@ -477,7 +695,8 @@ $('#refreshStands').addEventListener('click',async event=>{
     const loaded=await loadPublishedStands({retryGeocoding:true});
     if(loaded===false){toast('Standdaten konnten nicht geladen werden. Bitte erneut versuchen.');return}
     await refreshPendingApplicationCount();
-    if(!adminDashboard.hidden)await Promise.all([loadApplications(),loadEventDate()]);
+    await loadEventSettings();
+    if(!adminDashboard.hidden)await loadApplications();
     toast(loaded===null?'Standdaten werden bereits aktualisiert.':'Standdaten aktualisiert.');
   }catch{toast('Standdaten konnten nicht geladen werden. Bitte erneut versuchen.')}
   finally{button.disabled=false;button.classList.remove('is-refreshing');button.setAttribute('aria-busy','false')}

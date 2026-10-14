@@ -2,6 +2,8 @@
 
 Dieses Paket enthält die aktuelle öffentliche Web-App einschließlich Manifest, Service Worker, Icons, Kartenpins und Supabase-Anbindung. Es ist direkt für GitHub Pages vorbereitet; ein Build oder ein eigener Webserver ist nicht nötig.
 
+Das beiliegende `Dorfflohmarkt-Benutzerhandbuch.pdf` beschreibt alle Besucher-, Anmelde- und Adminfunktionen.
+
 ## Auf GitHub veröffentlichen
 
 1. Entpacke `Dorfflohmarkt-PWA-GitHub.zip`.
@@ -28,6 +30,16 @@ Weitere Informationen: [Installierbare PWAs bei MDN](https://developer.mozilla.o
 
 Das Paket verwendet das bereits eingerichtete Supabase-Projekt. Alle Standdaten einschließlich der manuell angelegten Stände liegen in Supabase. Die drei zuvor eingebauten Stände wurden in die gemeinsame Datenbank übernommen. Anmeldungen, Adminzugang, Veranstaltungstermin und Geocodierung bleiben darüber verbunden. `supabase-config.js` enthält die öffentliche Projekt-URL und den öffentlichen Publishable Key. Der private Schlüssel für geocode.maps.co liegt ausschließlich in Supabase. Für Karte, Geocodierung, Anmeldungen und aktuelle Standdaten wird eine Internetverbindung benötigt.
 
+## Favoritenroute
+
+„Route planen“ fragt den aktuellen Standort ab und optimiert alle favorisierten Stände anhand von Fußwegen des FOSSGIS-Dienstes `routing.openstreetmap.de`. Internet, HTTPS und Standortfreigabe sind erforderlich. `routing-client.js` muss mit veröffentlicht werden. Bis 16 Stopps wird exakt optimiert, darüber mit einer gekennzeichneten Näherung; maximal 99 Favoriten pro Planung. Das Ergebnis enthält alle Stopps und Navigationslinks. Gerätestandorte werden nicht in Supabase gespeichert. Für die Routenberechnung ist kein zusätzlicher API-Schlüssel erforderlich.
+
 ## Spätere Aktualisierungen
 
-Ersetze die geänderten App-Dateien im selben Repository und veröffentliche den Commit. Bei Änderungen an App-Dateien erhöhe die Versionsnummer von `CACHE_NAME` in `sw.js`, damit bereits installierte Apps den neuen Stand übernehmen. Dieses Paket verwendet Version `dorfflohmarkt-v35`.
+Unter **Admin → Neue Anmeldungen annehmen** lässt sich die öffentliche Anmeldung für alle Geräte öffnen und schließen. Bei geschlossener Anmeldung erscheint ein Hinweis. Admins können weiterhin Stände manuell anlegen. Die Einstellung und die Sperre beim Speichern werden in Supabase verwaltet.
+
+Unter **Admin → Nachzügler-Tokens** werden bei geschlossener Anmeldung einmalige Tokens erzeugt. Der Empfänger gibt den Token im Anmeldebereich ein; erst eine erfolgreich gespeicherte Anmeldung verbraucht ihn. Der Anmeldestatus wird per Realtime übertragen, bei Wiederverbindung neu geladen und zusätzlich in sichtbaren Apps alle fünf Sekunden abgefragt.
+
+Der Überblick unter der Karte zeigt Stände, gesetzte Kartenpins, Verpflegung, Favoriten und die häufigsten Warengruppen für die aktuelle Suche und Filterauswahl.
+
+Ersetze die geänderten App-Dateien im selben Repository und veröffentliche den Commit. Bei Änderungen an App-Dateien erhöhe die Versionsnummer von `CACHE_NAME` in `sw.js`, damit bereits installierte Apps den neuen Stand übernehmen. Dieses Paket verwendet Version `dorfflohmarkt-v39`.
