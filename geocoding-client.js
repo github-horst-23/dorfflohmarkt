@@ -1,10 +1,11 @@
 // Transient browser cache only; the shared, expiring cache lives in the Edge Function.
-window.createStandGeocoder = function ({ client, config, onCoordinates, onStatus, getStands }) {
+window.createStandGeocoder = function ({ client, config, onCoordinates, onStatus, getStands, onDiagnostic = () => {} }) {
   const cache = new Map(), pending = new Set(), retryAfter = new Map(), inFlight = new Map();
   let unavailableUntil = 0, pendingTimer = null;
   const cacheKey = stand => JSON.stringify([stand.id, stand.address]);
   return async function locateStands(stands, { retry = false } = {}) {
-    if (!client || !config?.enabled) return;
+    const report = (stand, code, retryAt = null) => onDiagnostic({ id: stand.id, address: stand.address, code, retryAt, checkedAt: Date.now() });
+    if (!client || !config?.enabled) { stands.forEach(stand => report(stand, 'NOT_CONFIGURED')); return; }
     // Manual refresh retries transient client failures. Shared server limits still apply.
     if (retry) { unavailableUntil = 0; retryAfter.clear(); }
     const now = Date.now(), missing = [];
@@ -26,6 +27,7 @@ window.createStandGeocoder = function ({ client, config, onCoordinates, onStatus
     const completion = new Promise(resolve => { resolveLookup = resolve; });
     missing.forEach(stand => pending.add(stand.key));
     missing.forEach(stand => inFlight.set(stand.key, completion));
+    missing.forEach(stand => report(stand, 'LOOKUP_RUNNING'));
     onStatus('Standpositionen werden ermittelt …');
     let failed = false;
     try {
@@ -50,6 +52,7 @@ window.createStandGeocoder = function ({ client, config, onCoordinates, onStatus
             expiresAt: Math.min(expiresAt, Date.now() + 30 * 86400000) };
           cache.set(requested.key, saved);
           received.add(value.id);
+          report(requested, 'OK');
           coordinates.push(saved);
         }
         onCoordinates(coordinates);
@@ -60,6 +63,7 @@ window.createStandGeocoder = function ({ client, config, onCoordinates, onStatus
           const providerRetry = Date.parse(issue?.retryAt);
           retryAfter.set(stand.key, issue?.code === 'PENDING' ? Date.now() + 10000 :
             Number.isFinite(providerRetry) && providerRetry > Date.now() ? Math.min(providerRetry, Date.now() + 6 * 3600000) : Date.now() + 3600000);
+          report(stand, issue?.code || 'INVALID_RESULT', new Date(retryAfter.get(stand.key)).toISOString());
           if (issue?.code === 'PENDING' && getStands && !pendingTimer) {
             pendingTimer = setTimeout(() => {
               pendingTimer = null;
@@ -73,6 +77,9 @@ window.createStandGeocoder = function ({ client, config, onCoordinates, onStatus
       unavailableUntil = Date.now() + 5 * 60000;
       failed = true;
     } finally {
+      // Include unprocessed batches when the service fails partway through a request.
+      if (unavailableUntil > Date.now()) missing.filter(stand => !cache.has(stand.key))
+        .forEach(stand => report(stand, 'UNAVAILABLE', new Date(unavailableUntil).toISOString()));
       missing.forEach(stand => pending.delete(stand.key));
       missing.forEach(stand => inFlight.delete(stand.key));
       resolveLookup();

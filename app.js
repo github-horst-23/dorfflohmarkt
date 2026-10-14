@@ -6,6 +6,8 @@ const legacyStandIds={
 };
 let stands=[];
 let manualStandGeocodingAddress=null;
+const geocodingDiagnostics=new Map(),geocodingRetries=new Set();
+let publishedStandListReady=false;
 const supabaseConfig=window.DORFFLOHMARKT_SUPABASE||{};
 const supabaseClient=window.supabase?.createClient&&supabaseConfig.url&&supabaseConfig.anonKey?window.supabase.createClient(supabaseConfig.url,supabaseConfig.anonKey):null;
 const getFavs=()=>{try{const saved=JSON.parse(localStorage.getItem('dorfflohmarkt-favs')||'[]');return Array.isArray(saved)?[...new Set(saved.filter(id=>typeof id==='string').map(id=>legacyStandIds[id]||id))]:[]}catch{return []}};
@@ -14,6 +16,42 @@ const favoriteRouter=window.createFavoriteRouter();
 const favoriteRouteState={signature:'',controller:null,busy:false};
 const featureFilters={favorites:false,food:false};
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const geocodingReport=document.createElement('details');
+geocodingReport.className='admin-manual-entry geocoding-report';
+geocodingReport.innerHTML='<summary id="geocodingReportHeading">Geocodierung: Fehlerbericht</summary><p>Veröffentlichte Stände ohne genaue Kartenposition. Laufende und noch ausstehende Suchen sind gesondert gekennzeichnet.</p><p id="geocodingReportSummary" role="status"></p><button class="secondary-button" type="button" data-geocode-all>Alle erneut versuchen</button><p id="geocodingReportMessage" role="status"></p><div id="geocodingReportList"></div>';
+$('#adminDashboard .admin-manage-entry').before(geocodingReport);
+function hasStandPosition(stand){return Number.isFinite(stand.lat)&&Number.isFinite(stand.lng)&&Math.abs(stand.lat)<=90&&Math.abs(stand.lng)<=180&&(stand.geocodingSource!=='maps-co'||stand.geocodingExpiresAt>Date.now())}
+function renderGeocodingReport(){
+  const host=$('#geocodingReportList');
+  if($('#adminDashboard').hidden){host.replaceChildren();return}
+  const unresolved=stands.filter(stand=>!hasStandPosition(stand)).sort((a,b)=>streetAddress(a.address).localeCompare(streetAddress(b.address),'de',{numeric:true}));
+  $('#geocodingReportHeading').textContent=`Geocodierung: Fehlerbericht (${unresolved.length})`;
+  const explanations={LOOKUP_RUNNING:'Suche läuft …',PENDING:'Eine andere Anfrage ermittelt die Position bereits.',ZERO_RESULTS:'Keine passende Adresse gefunden.',INEXACT_RESULT:'Nur eine ungenaue Position gefunden; kein Haus-Pin gesetzt.',OUTSIDE_TOWN:'Ergebnis liegt außerhalb von 67373 Dudenhofen.',OVER_QUERY_LIMIT:'Anfragelimit des Geocodierungsdienstes erreicht.',UNAVAILABLE:'Geocodierungsdienst oder Verbindung derzeit nicht verfügbar.',NOT_CONFIGURED:'Geocodierung ist nicht eingerichtet oder deaktiviert.',REQUEST_DENIED:'Der Geocodierungsdienst hat die Anfrage abgelehnt. Freischaltung oder Dienstkonfiguration prüfen.',NOT_PUBLISHED:'Stand ist für die Positionssuche nicht als veröffentlicht verfügbar.',INVALID_RESULT:'Der Dienst hat keine verwendbare genaue Position geliefert.'};
+  $('#geocodingReportSummary').textContent=!publishedStandListReady?'Standdaten werden geladen …':unresolved.length?`${unresolved.length} von ${stands.length} veröffentlichten Ständen ohne genaue Kartenposition.`:'Alle veröffentlichten Stände haben eine Kartenposition.';
+  const date=value=>new Date(value).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'});
+  host.innerHTML=unresolved.map(stand=>{
+    const diagnostic=geocodingDiagnostics.get(stand.id),issue=diagnostic?.address===stand.address?diagnostic:null;
+    const running=issue?.code==='LOOKUP_RUNNING'||geocodingRetries.has(stand.id);
+    const retryAt=Date.parse(issue?.retryAt);
+    return `<article class="geocoding-issue"><h4>${escapeHtml(streetAddress(stand.address))}</h4><p>${escapeHtml(issue?explanations[issue.code]||'Die genaue Position konnte nicht ermittelt werden.':'Noch nicht geprüft oder bisher kein Ergebnis verfügbar.')}</p>${issue?`<small>Letzte Rückmeldung: ${date(issue.checkedAt)}${Number.isFinite(retryAt)&&retryAt>Date.now()?` · Erneuter Versuch frühestens ${date(retryAt)}`:''}</small>`:''}<div class="admin-actions"><button class="secondary-button" type="button" data-geocode-retry="${escapeHtml(stand.id)}" ${running?'disabled':''}>${running?'Suche läuft …':'Erneut versuchen'}</button><button class="secondary-button" type="button" data-geocode-edit="${escapeHtml(stand.id)}">Adresse bearbeiten</button></div></article>`;
+  }).join('');
+  $('[data-geocode-all]').disabled=!unresolved.length||geocodingRetries.size>0||!publishedStandListReady;
+}
+geocodingReport.addEventListener('click',async event=>{
+  const button=event.target.closest('button');if(!button||$('#adminDashboard').hidden)return;
+  if(button.hasAttribute('data-geocode-edit')){
+    const form=$$('.admin-stand-edit').find(form=>form.dataset.standId===button.dataset.geocodeEdit);
+    if(form){form.closest('details').open=true;$('#adminDashboard .admin-manage-entry').open=true;form.scrollIntoView({behavior:'smooth',block:'center'});form.querySelector('[name="address"]').focus({preventScroll:true})}
+    return;
+  }
+  const selected=button.hasAttribute('data-geocode-all')?stands.filter(stand=>!hasStandPosition(stand)):stands.filter(stand=>stand.id===button.dataset.geocodeRetry);
+  if(!selected.length||selected.some(stand=>geocodingRetries.has(stand.id)))return;
+  selected.forEach(stand=>geocodingRetries.add(stand.id));renderGeocodingReport();
+  $('#geocodingReportMessage').textContent='Positionssuche wird erneut angefragt. Serverseitige Wartezeiten bleiben wirksam.';
+  try{await locateStandAddresses(selected,{retry:true});$('#geocodingReportMessage').textContent='Anfrage abgeschlossen. Erfolgreich zugeordnete Stände verschwinden aus dem Bericht; übrige Rückmeldungen stehen unten.'}
+  catch{$('#geocodingReportMessage').textContent='Positionssuche konnte nicht abgeschlossen werden. Bitte später erneut versuchen.'}
+  finally{selected.forEach(stand=>geocodingRetries.delete(stand.id));renderGeocodingReport()}
+});
 const adminManualForm=$('#registrationForm').cloneNode(true);
 adminManualForm.id='adminManualForm';
 adminManualForm.hidden=false;
@@ -294,8 +332,9 @@ const locateStandAddresses=window.createStandGeocoder({
       const stand=stands.find(value=>value.id===location.id&&value.address===location.address);
       if(stand)Object.assign(stand,{lat:location.lat,lng:location.lng,geocodingSource:'maps-co',geocodingExpiresAt:location.expiresAt});
     }
-    refreshStandPins();
+    refreshStandPins();renderGeocodingReport();
   },
+  onDiagnostic:diagnostic=>{geocodingDiagnostics.set(diagnostic.id,diagnostic);renderGeocodingReport()},
   onStatus:message=>{
     const status=$('#mapLocationStatus');
     status.textContent=message;
@@ -436,6 +475,9 @@ async function loadPublishedStands({retryGeocoding=false,geocodeAddress=null}={}
     return {...row,title:'Flohmarktstand',...(cached?{lat:saved.lat,lng:saved.lng,geocodingSource:saved.geocodingSource,geocodingExpiresAt:saved.geocodingExpiresAt}:{})};
   });
   favorites=favorites.filter(id=>stands.some(s=>s.id===id));
+  publishedStandListReady=true;
+  for(const [id,issue] of geocodingDiagnostics)if(!stands.some(stand=>stand.id===id&&stand.address===issue.address))geocodingDiagnostics.delete(id);
+  renderGeocodingReport();
   saveFavs();
   if(!$('#adminDashboard').hidden)renderAdminPublishedStands(stands);
   const priorityAddress=geocodeAddress||manualStandGeocodingAddress;
@@ -629,6 +671,7 @@ async function refreshAdmin(){
   const {data:{session}}=await supabaseClient.auth.getSession();
   if(adminSessionId!==(session?.user.id||null)){adminSessionId=session?.user.id||null;adminSessionVersion++;pendingCountSequence++;$('#generatedLateToken').value='';$('#lateTokenOutput').hidden=true;}
   adminLoginForm.hidden=Boolean(session);adminDashboard.hidden=!session;
+  renderGeocodingReport();
   if(session){loadApplications();loadAdminPublishedStands();loadEventSettings()}
   else{setPendingApplicationCount(null);adminApplications.innerHTML='';$('#generatedLateToken').value='';$('#lateTokenOutput').hidden=true}
 }

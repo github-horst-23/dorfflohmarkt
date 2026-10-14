@@ -360,3 +360,11 @@ h1.page-title{margin:0 0 22px;font:600 clamp(27px,3.4vw,38px)/1.12 Manrope,sans-
   .map-controls [data-filter="Spiele, Musik, Elektronik"]{grid-column:1 / -1}
   .map-controls .filter-features{grid-column:1 / -1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;min-width:0;padding-top:4px}
 }
+
+.geocoding-issue{margin:12px 0;padding:14px;border:1px solid #ead4a4;border-left:3px solid #b97800;border-radius:9px;background:#fffdf6;overflow-wrap:anywhere}
+.geocoding-issue h4{margin:0 0 7px;font-size:14px}
+.geocoding-issue p{margin:6px 0;font-size:13px;line-height:1.5}
+.geocoding-issue small{display:block;color:var(--muted);font-size:11px;line-height:1.5;margin:8px 0}
+.geocoding-issue .admin-actions{flex-wrap:wrap;gap:8px}
+.geocoding-report button{min-height:44px}
+.geocoding-report button:disabled{opacity:.5;cursor:default}
