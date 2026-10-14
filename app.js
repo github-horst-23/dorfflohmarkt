@@ -16,6 +16,8 @@ const favoriteRouter=window.createFavoriteRouter();
 const favoriteRouteState={signature:'',controller:null,busy:false};
 const featureFilters={favorites:false,food:false};
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const standAddressCollator=new Intl.Collator('de',{numeric:true,sensitivity:'base'});
+function compareStandAddresses(a,b){return standAddressCollator.compare(streetAddress(a.address),streetAddress(b.address))||standAddressCollator.compare(String(a.id),String(b.id))}
 const geocodingReport=document.createElement('details');
 geocodingReport.className='admin-manual-entry geocoding-report';
 geocodingReport.innerHTML='<summary id="geocodingReportHeading">Geocodierung: Fehlerbericht</summary><p>Veröffentlichte Stände ohne genaue Kartenposition. Laufende und noch ausstehende Suchen sind gesondert gekennzeichnet.</p><p id="geocodingReportSummary" role="status"></p><button class="secondary-button" type="button" data-geocode-all>Alle erneut versuchen</button><p id="geocodingReportMessage" role="status"></p><div id="geocodingReportList"></div>';
@@ -131,13 +133,13 @@ function card(s,expanded=false){
 }
 function renderStands(){
   const expanded=new Set($$('.stand-public-details[open]').map(element=>element.dataset.standId));
-  const visible=stands.filter(matches);
+  const visible=stands.filter(matches).sort(compareStandAddresses);
   $('#standGrid').innerHTML=visible.map(stand=>card(stand,expanded.has(stand.id))).join('');
   $('#noStands').hidden=visible.length>0;
   $('#noStands').textContent=stands.length?'Keine Stände für diese Auswahl gefunden.':'Noch keine Stände angemeldet.';
   $('#resultCount').textContent=`${visible.length} ${visible.length===1?'Stand':'Stände'}`;
   const favs=favorites.map(id=>stands.find(s=>s.id===id)).filter(Boolean);
-  $('#favoritesGrid').innerHTML=favs.map(stand=>card(stand,expanded.has(stand.id))).join('');
+  $('#favoritesGrid').innerHTML=[...favs].sort(compareStandAddresses).map(stand=>card(stand,expanded.has(stand.id))).join('');
   $('#emptyFavorites').classList.toggle('visible',favs.length===0);
   $('#favoritesGrid').style.display=favs.length?'grid':'none';
   renderFavoriteRoute(favs);
@@ -313,7 +315,8 @@ function syncFoodDetails(form){
   form.querySelector('.food-details').hidden=!showDescription;
   field.disabled=!showDescription;
   field.required=showDescription&&form.id==='registrationForm';
-  field.pattern=field.required?'.*\\S.*':'';
+  if(field.required)field.pattern='.*\\S.*';
+  else field.removeAttribute('pattern');
 }
 $$('[name="foodAvailable"]').forEach(radio=>radio.addEventListener('change',()=>syncFoodDetails(radio.closest('form'))));
 syncFoodDetails($('#registrationForm'));syncFoodDetails(adminManualForm);
@@ -322,7 +325,7 @@ if(['#anmeldung','#favoriten','#hinweise','#admin'].includes(location.hash)){con
 let townMap=null;
 let makeMapPin=null;
 const standPinMarkers=[];
-let geocodingPositionAttribution=null;
+let geocodingPositionAttribution=false;
 const locateStandAddresses=window.createStandGeocoder({
   client:supabaseClient,
   config:window.DORFFLOHMARKT_GEOCODING,
@@ -343,7 +346,27 @@ const locateStandAddresses=window.createStandGeocoder({
 });
 if(window.L){
   townMap=L.map('mapCanvas').setView([49.3186,8.3886],15);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(townMap);
+  const streetLayer=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(townMap);
+  const aerialLayer=L.tileLayer.wms('https://geo4.service24.rlp.de/wms/rp_dop20.fcgi',{
+    layers:'rp_dop20',format:'image/png',transparent:false,version:'1.1.1',maxZoom:19,
+    bounds:[[48.897996,6.037773],[51.000893,8.617703]],
+    attribution:`&copy; <a href="https://lvermgeo.rlp.de/geodaten-geoshop/open-data" target="_blank" rel="noopener noreferrer">GeoBasis-DE / LVermGeoRP ${new Date().getFullYear()}</a>, <a href="https://www.govdata.de/dl-de/by-2-0" target="_blank" rel="noopener noreferrer">dl-de/by-2-0</a> [Daten bearbeitet]`
+  });
+  let currentBasemap='street';
+  const basemapStatus=$('#basemapStatus');
+  $$('[data-basemap]').forEach(button=>{
+    button.disabled=false;
+    button.addEventListener('click',()=>{
+      const next=button.dataset.basemap;
+      if(next===currentBasemap)return;
+      townMap.removeLayer(currentBasemap==='aerial'?aerialLayer:streetLayer);
+      currentBasemap=next;
+      (next==='aerial'?aerialLayer:streetLayer).addTo(townMap);
+      $$('[data-basemap]').forEach(control=>control.setAttribute('aria-pressed',String(control.dataset.basemap===next)));
+      basemapStatus.textContent='';basemapStatus.hidden=true;
+    });
+  });
+  aerialLayer.on('tileerror',()=>{if(currentBasemap==='aerial'){basemapStatus.textContent='Luftbilder gerade nicht verfügbar. Bitte zur Straßenkarte wechseln oder später erneut versuchen.';basemapStatus.hidden=false}});
   makeMapPin=({favorite=false,food=false}={})=>L.divIcon({
     className:'market-map-marker',
     html:`<div class="market-map-pin" aria-hidden="true"><img src="./marker.png" alt="">${favorite?'<span class="map-pin-badge map-pin-badge--favorite"><img src="./marker-favorite.svg" alt=""></span>':''}${food?'<span class="map-pin-badge map-pin-badge--food"><img src="./marker-food.svg" alt=""></span>':''}</div>`,
@@ -381,18 +404,11 @@ function refreshStandPins(){
   standPinMarkers.length=0;
   const visible=stands.filter(s=>Number.isFinite(s.lat)&&Number.isFinite(s.lng)&&
     (s.geocodingSource!=='maps-co'||s.geocodingExpiresAt>Date.now())&&matches(s));
+  // Share the normal map attribution; no separate provider label over the image.
+  const positionAttribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
   if(visible.some(s=>s.geocodingSource==='maps-co')){
-    if(!geocodingPositionAttribution){
-      geocodingPositionAttribution=L.control({position:'bottomleft'});
-      geocodingPositionAttribution.onAdd=()=>{
-        const label=L.DomUtil.create('div','geocoding-position-attribution');
-        label.textContent='Standpositionen: geocode.maps.co';
-        label.setAttribute('translate','no');
-        return label;
-      };
-      geocodingPositionAttribution.addTo(townMap);
-    }
-  }else if(geocodingPositionAttribution){geocodingPositionAttribution.remove();geocodingPositionAttribution=null}
+    if(!geocodingPositionAttribution){townMap.attributionControl.addAttribution(positionAttribution);geocodingPositionAttribution=true}
+  }else if(geocodingPositionAttribution){townMap.attributionControl.removeAttribution(positionAttribution);geocodingPositionAttribution=false}
   visible.forEach(s=>{
     const favorite=favorites.includes(s.id),food=s.food_available==='Ja';
     const features=[favorite?'Favorit':'',food?'Mit Verpflegung':''].filter(Boolean);
@@ -703,8 +719,7 @@ async function loadAdminPublishedStands(){
 }
 function renderAdminPublishedStands(data){
   const opened=new Set([...adminPublishedStands.querySelectorAll('details[open] .admin-stand-edit')].map(form=>form.dataset.standId));
-  const collator=new Intl.Collator('de',{numeric:true,sensitivity:'base'});
-  const sorted=[...data].sort((a,b)=>collator.compare(streetAddress(a.address),streetAddress(b.address)));
+  const sorted=[...data].sort(compareStandAddresses);
   const signature=JSON.stringify(sorted.map(({id,address,categories,food_available,food_description,description})=>({id,address,categories,food_available,food_description,description})));
   if(signature===adminPublishedSignature)return;
   adminPublishedSignature=signature;
