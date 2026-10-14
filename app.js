@@ -5,6 +5,7 @@ const legacyStandIds={
   'example-beethoven':'943afd79-7ef8-5146-bcfd-7358a2edeba6'
 };
 let stands=[];
+let manualStandGeocodingAddress=null;
 const supabaseConfig=window.DORFFLOHMARKT_SUPABASE||{};
 const supabaseClient=window.supabase?.createClient&&supabaseConfig.url&&supabaseConfig.anonKey?window.supabase.createClient(supabaseConfig.url,supabaseConfig.anonKey):null;
 const getFavs=()=>{try{const saved=JSON.parse(localStorage.getItem('dorfflohmarkt-favs')||'[]');return Array.isArray(saved)?[...new Set(saved.filter(id=>typeof id==='string').map(id=>legacyStandIds[id]||id))]:[]}catch{return []}};
@@ -19,6 +20,10 @@ adminManualForm.hidden=false;
 adminManualForm.classList.add('admin-manual-form');
 adminManualForm.querySelectorAll('[required]').forEach(field=>field.required=false);
 adminManualForm.querySelectorAll('.required-note').forEach(note=>note.remove());
+adminManualForm.querySelector('[name="address"]').required=true;
+const manualAddressNote=document.createElement('small');
+manualAddressNote.className='required-note';manualAddressNote.textContent='Pflichtfeld';
+adminManualForm.querySelector('[name="address"]').closest('label').querySelector('.field-label').append(' ',manualAddressNote);
 adminManualForm.querySelector('.input-hint').textContent='Wähle passende Warengruppen aus.';
 adminManualForm.querySelectorAll('.optional').forEach(note=>note.remove());
 adminManualForm.querySelector('.rules-confirmation').remove();
@@ -28,6 +33,9 @@ adminManualForm.querySelector('.submit-button').innerHTML='Stand direkt veröffe
 adminManualForm.querySelectorAll('.category-group').forEach(group=>group.open=false);
 adminManualForm.querySelectorAll('[id]').forEach(element=>{if(element!==adminManualForm)element.id=`admin-${element.id}`});
 $('#adminManualFormHost').append(adminManualForm);
+const adminManualStatus=document.createElement('p');
+adminManualStatus.className='admin-message';adminManualStatus.setAttribute('role','status');
+$('#adminManualFormHost').append(adminManualStatus);
 const countdownTimer=$('#countdownTimer');
 let marketDay=new Date(2027,8,1,0,0,0);
 let marketDayEnd=new Date(2027,8,2,0,0,0);
@@ -404,7 +412,7 @@ window.addEventListener('appinstalled', () => {
 // Öffentliche Live-Liste und Moderation via Supabase Auth + Row Level Security.
 let standRefreshSequence=0;
 let lastStandRefreshAt=0;
-async function loadPublishedStands({retryGeocoding=false}={}){
+async function loadPublishedStands({retryGeocoding=false,geocodeAddress=null}={}){
   if(!supabaseClient)return false;
   const sequence=++standRefreshSequence;
   lastStandRefreshAt=Date.now();
@@ -430,7 +438,12 @@ async function loadPublishedStands({retryGeocoding=false}={}){
   favorites=favorites.filter(id=>stands.some(s=>s.id===id));
   saveFavs();
   if(!$('#adminDashboard').hidden)renderAdminPublishedStands(stands);
-  if(townMap)await locateStandAddresses(stands,{retry:retryGeocoding});
+  const priorityAddress=geocodeAddress||manualStandGeocodingAddress;
+  if(priorityAddress){
+    // The saved address goes first; geocoding also runs if Leaflet is unavailable.
+    await locateStandAddresses(stands.filter(stand=>stand.address===priorityAddress),{retry:retryGeocoding});
+    void locateStandAddresses(stands);
+  }else await locateStandAddresses(stands,{retry:retryGeocoding});
   return true;
 }
 if(supabaseClient){
@@ -570,29 +583,46 @@ adminManualForm.addEventListener('submit',async event=>{
   const submitButton=adminManualForm.querySelector('.submit-button');
   if(submitButton.disabled)return;
   submitButton.disabled=true;
-  adminStatus(adminMessage,'Stand wird veröffentlicht …');
+  let savedRegistration=false,published=false;
+  adminStatus(adminManualStatus,'Stand wird in Supabase gespeichert …');
   try{
     const {data:{session}}=await supabaseClient.auth.getSession();
-    if(!session){adminStatus(adminMessage,'Bitte zuerst als Admin anmelden.');return}
+    if(!session){adminStatus(adminManualStatus,'Bitte zuerst als Admin anmelden.');return}
     const {data:admin,error:adminError}=await supabaseClient.from('admin_users').select('user_id').eq('user_id',session.user.id).maybeSingle();
-    if(adminError||!admin){adminStatus(adminMessage,'Für diesen Zugang ist keine Adminfreigabe eingerichtet.');return}
+    if(adminError||!admin){adminStatus(adminManualStatus,'Für diesen Zugang ist keine Adminfreigabe eingerichtet.');return}
     const data=new FormData(adminManualForm);
+    if(!streetAddress(data.get('address'),'')){adminStatus(adminManualStatus,'Bitte Straße und Hausnummer für den Stand eingeben.');return}
     const categories=data.getAll('category');
     const otherOffer=data.get('otherOffer')?.trim();
     if(otherOffer)categories.push(`Sonstiges: ${otherOffer}`);
     if(!categories.length)categories.push('Sonstiges');
     const application={first_name:data.get('firstName').trim()||'Manuell',last_name:data.get('lastName').trim()||'erfasster Stand',email:data.get('email').trim()||'flohmarkt@dudenhofen.org',address:localStandAddress(data.get('address')),categories,food_available:data.get('foodAvailable')||'Nein',food_description:data.get('foodDescription')||'',description:data.get('description')||'',status:'pending'};
     const {data:registration,error:insertError}=await supabaseClient.from('stand_registrations').insert(application).select('id').single();
-    if(insertError){adminStatus(adminMessage,'Der Stand konnte nicht gespeichert werden. Bitte Eingaben und Datenbankzugriff prüfen.');return}
+    if(insertError){adminStatus(adminManualStatus,'Der Stand konnte nicht gespeichert werden. Bitte Eingaben und Datenbankzugriff prüfen.');return}
+    savedRegistration=true;
+    manualStandGeocodingAddress=application.address;
     const {error:publishError}=await supabaseClient.rpc('approve_stand_registration',{registration_id:registration.id});
-    if(publishError){adminStatus(adminMessage,'Der Eintrag wurde gespeichert, aber nicht veröffentlicht. Er steht bei den offenen Anmeldungen zur Prüfung.');await loadApplications();return}
+    if(publishError){adminStatus(adminManualStatus,'Der Eintrag wurde in Supabase gespeichert, aber nicht veröffentlicht. Bitte bei den offenen Anmeldungen prüfen und nicht erneut anlegen.');await loadApplications();return}
+    published=true;
     adminManualForm.reset();
     syncFoodDetails(adminManualForm);
     adminManualForm.querySelectorAll('.category-group').forEach(group=>group.open=false);
-    adminStatus(adminMessage,'Stand direkt veröffentlicht.');
-    await Promise.all([loadPublishedStands(),loadApplications()]);
-  }catch(error){console.warn('Manueller Stand konnte nicht veröffentlicht werden.',error);adminStatus(adminMessage,'Der Stand konnte nicht veröffentlicht werden. Bitte erneut versuchen.')}
-  finally{submitButton.disabled=false}
+    adminStatus(adminManualStatus,'Stand in Supabase gespeichert und veröffentlicht. Kartenposition wird jetzt ermittelt …');
+    let loaded=null;
+    for(let attempt=0;attempt<3&&loaded===null;attempt++)loaded=await loadPublishedStands({retryGeocoding:true,geocodeAddress:application.address});
+    await loadApplications();
+    if(loaded!==true){adminStatus(adminManualStatus,'Der Stand ist in Supabase gespeichert und veröffentlicht. Die Anzeige konnte noch nicht aktualisiert werden. Bitte „Aktualisieren“ verwenden und den Stand nicht erneut anlegen.');return}
+    const atAddress=stands.filter(stand=>stand.address===application.address);
+    const located=atAddress.length>0&&atAddress.every(stand=>Number.isFinite(stand.lat)&&Number.isFinite(stand.lng)&&
+      (stand.geocodingSource!=='maps-co'||stand.geocodingExpiresAt>Date.now()));
+    adminStatus(adminManualStatus,located
+      ?townMap?'Stand in Supabase gespeichert, geocodiert und auf der Karte eingetragen.':'Stand in Supabase gespeichert und geocodiert. Die Kartenansicht ist gerade nicht verfügbar.'
+      :'Stand in Supabase gespeichert und veröffentlicht. Eine genaue Hausposition konnte noch nicht ermittelt werden; der Stand bleibt in der Liste. Bitte Adresse prüfen oder später „Aktualisieren“ verwenden. Nicht erneut anlegen.');
+  }catch(error){console.warn('Manueller Stand konnte nicht vollständig verarbeitet werden.',error);adminStatus(adminManualStatus,published
+    ?'Der Stand ist in Supabase gespeichert und veröffentlicht. Die Kartenposition oder Anzeige konnte noch nicht aktualisiert werden. Bitte aktualisieren und nicht erneut anlegen.'
+    :savedRegistration?'Der Eintrag ist in Supabase gespeichert. Bitte offene Anmeldungen und veröffentlichte Stände prüfen, bevor du ihn erneut anlegst.'
+      :'Das Speichern konnte nicht bestätigt werden. Bitte Verbindung sowie offene und veröffentlichte Stände prüfen, bevor du es erneut versuchst.')}
+  finally{manualStandGeocodingAddress=null;submitButton.disabled=false}
 });
 async function refreshAdmin(){
   if(!supabaseClient){adminStatus(adminLoginMessage,'Supabase ist noch nicht eingerichtet.');return}

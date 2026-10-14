@@ -42,4 +42,13 @@ Unter **Admin → Nachzügler-Tokens** werden bei geschlossener Anmeldung einmal
 
 Der Überblick unter der Karte zeigt Stände, gesetzte Kartenpins, Verpflegung, Favoriten und die häufigsten Warengruppen für die aktuelle Suche und Filterauswahl.
 
-Ersetze die geänderten App-Dateien im selben Repository und veröffentliche den Commit. Bei Änderungen an App-Dateien erhöhe die Versionsnummer von `CACHE_NAME` in `sw.js`, damit bereits installierte Apps den neuen Stand übernehmen. Dieses Paket verwendet Version `dorfflohmarkt-v40`.
+Ersetze die geänderten App-Dateien im selben Repository und veröffentliche den Commit. Bei Änderungen an App-Dateien erhöhe die Versionsnummer von `CACHE_NAME` in `sw.js`, damit bereits installierte Apps den neuen Stand übernehmen. Dieses Paket verwendet Version `dorfflohmarkt-v41`.
+
+
+## Wenn eine Veröffentlichung fehlschlägt
+
+Die Node-Meldung `DEP0040: The punycode module is deprecated` kann aus der GitHub-Action `actions/deploy-pages` stammen und tritt auch bei erfolgreichen Veröffentlichungen auf. Diese statische App nutzt kein `punycode` und benötigt keinen npm-Build. Entscheidend ist die letzte Fehlermeldung des fehlgeschlagenen Jobs.
+
+Beim geprüften Lauf `38595775667` vom 14.10.2026 wurde das Artefakt gefunden und das Deployment angelegt. Anschließend blieb der Status bei `updating_pages`, bis `Timeout reached, aborting!` gemeldet wurde. Das ist ein Timeout beim Veröffentlichen auf GitHub Pages; ein App-Dateifehler ist durch dieses Protokoll nicht belegt. Prüfe [GitHub Status](https://www.githubstatus.com/) und starte über **Actions → fehlgeschlagener Lauf → Re-run failed jobs** einen erneuten Versuch. Bei wiederholtem Timeout sind der Lauf-Link und die Deployment-ID für GitHub Support relevant.
+
+Lade beim Aktualisieren sämtliche entpackten ZIP-Dateien in dasselbe Stammverzeichnis hoch, einschließlich `routing-client.js` und der versteckten Datei `.nojekyll`. Unter **Settings → Pages** bleibt die Quelle **Deploy from a branch**, Branch **main**, Ordner **/ (root)**. Das ZIP selbst ist kein Pages-Artefakt zum direkten Veröffentlichen.

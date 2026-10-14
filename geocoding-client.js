@@ -1,6 +1,6 @@
 // Transient browser cache only; the shared, expiring cache lives in the Edge Function.
 window.createStandGeocoder = function ({ client, config, onCoordinates, onStatus, getStands }) {
-  const cache = new Map(), pending = new Set(), retryAfter = new Map();
+  const cache = new Map(), pending = new Set(), retryAfter = new Map(), inFlight = new Map();
   let unavailableUntil = 0, pendingTimer = null;
   const cacheKey = stand => JSON.stringify([stand.id, stand.address]);
   return async function locateStands(stands, { retry = false } = {}) {
@@ -8,6 +8,8 @@ window.createStandGeocoder = function ({ client, config, onCoordinates, onStatus
     // Manual refresh retries transient client failures. Shared server limits still apply.
     if (retry) { unavailableUntil = 0; retryAfter.clear(); }
     const now = Date.now(), missing = [];
+    // An explicit save must wait for lookups already started by Realtime/map reloads.
+    const waiting = [...new Set(stands.map(stand => inFlight.get(cacheKey(stand))).filter(Boolean))];
     for (const [key, saved] of cache) if (saved.expiresAt <= now) cache.delete(key);
     for (const stand of stands) {
       const key = cacheKey(stand), saved = cache.get(key);
@@ -18,9 +20,12 @@ window.createStandGeocoder = function ({ client, config, onCoordinates, onStatus
       if (stand.geocodingSource === 'maps-co') onCoordinates([{ id: stand.id, address: stand.address, lat: null, lng: null, expiresAt: 0 }]);
       if (!pending.has(key) && (retryAfter.get(key) || 0) <= now) missing.push({ id: stand.id, address: stand.address, key });
     }
-    if (!missing.length) { if (!pending.size) onStatus(''); return; }
-    if (unavailableUntil > now) return;
+    if (!missing.length) { await Promise.all(waiting); if (!pending.size) onStatus(''); return; }
+    if (unavailableUntil > now) { await Promise.all(waiting); return; }
+    let resolveLookup;
+    const completion = new Promise(resolve => { resolveLookup = resolve; });
     missing.forEach(stand => pending.add(stand.key));
+    missing.forEach(stand => inFlight.set(stand.key, completion));
     onStatus('Standpositionen werden ermittelt …');
     let failed = false;
     try {
@@ -69,7 +74,10 @@ window.createStandGeocoder = function ({ client, config, onCoordinates, onStatus
       failed = true;
     } finally {
       missing.forEach(stand => pending.delete(stand.key));
+      missing.forEach(stand => inFlight.delete(stand.key));
+      resolveLookup();
       onStatus(failed ? 'Einige Standpositionen konnten gerade nicht ermittelt werden. Die Adressen findest du in der Standliste.' : '');
     }
+    await Promise.all(waiting);
   };
 };
