@@ -40,9 +40,9 @@ Unter **Admin → Neue Anmeldungen annehmen** lässt sich die öffentliche Anmel
 
 Unter **Admin → Nachzügler-Tokens** werden bei geschlossener Anmeldung einmalige Tokens erzeugt. Der Empfänger gibt den Token im Anmeldebereich ein; erst eine erfolgreich gespeicherte Anmeldung verbraucht ihn. Der Anmeldestatus wird per Realtime übertragen, bei Wiederverbindung neu geladen und zusätzlich in sichtbaren Apps alle fünf Sekunden abgefragt.
 
-Der Überblick unter der Karte zeigt Stände, gesetzte Kartenpins, Verpflegung, Favoriten und die häufigsten Warengruppen für die aktuelle Suche und Filterauswahl.
+Der Überblick unter der Karte zeigt Stände, Verpflegung, Favoriten und die häufigsten Warengruppen für die aktuelle Suche und Filterauswahl.
 
-Ersetze die geänderten App-Dateien im selben Repository und veröffentliche den Commit. Bei Änderungen an App-Dateien erhöhe die Versionsnummer von `CACHE_NAME` in `sw.js`, damit bereits installierte Apps den neuen Stand übernehmen. Dieses Paket verwendet Version `dorfflohmarkt-v47`.
+Ersetze die geänderten App-Dateien im selben Repository und veröffentliche den Commit. Bei Änderungen an App-Dateien erhöhe die Versionsnummer von `CACHE_NAME` in `sw.js`, damit bereits installierte Apps den neuen Stand übernehmen. Dieses Paket verwendet Version `dorfflohmarkt-v49`.
 
 
 ## Wenn eine Veröffentlichung fehlschlägt

@@ -129,7 +129,7 @@ function streetAddress(address,fallback='Standadresse folgt'){
 function localStandAddress(address){const street=streetAddress(address,'');return street?`${street}, 67373 Dudenhofen`:'67373 Dudenhofen'}
 function card(s,expanded=false){
   const liked=favorites.includes(s.id),heading=streetAddress(s.address);
-  return `<article class="stand-card"><div class="stand-card-top"><h3>${escapeHtml(heading)}</h3><button class="favorite-toggle ${liked?'active':''}" data-fav="${escapeHtml(s.id)}" aria-label="${liked?'Aus Favoriten entfernen':'Zu Favoriten hinzufügen'}: ${escapeHtml(heading)}">${liked?'★':'☆'}</button></div><div class="tag-row">${(s.categories||[]).map(c=>`<span class="tag">${escapeHtml(c)}</span>`).join('')}</div>${s.food_available==='Ja'&&s.food_description?`<p class="card-desc"><strong>Verpflegung:</strong> ${escapeHtml(s.food_description)}</p>`:''}<details class="stand-public-details" data-stand-id="${escapeHtml(s.id)}" ${expanded?'open':''}><summary>Standdetails</summary><dl><dt>Standort</dt><dd>${escapeHtml(localStandAddress(s.address))}</dd><dt>Alle Angebote</dt><dd>${(s.categories||[]).length?`<ul>${s.categories.map(category=>`<li>${escapeHtml(category)}</li>`).join('')}</ul>`:'Keine Angaben.'}</dd><dt>Verpflegung</dt><dd>${s.food_available==='Ja'?escapeHtml(s.food_description||'Verpflegung wird angeboten.'):'Keine Verpflegung.'}</dd><dt>Weitere Informationen</dt><dd>${escapeHtml(s.description||'Keine weiteren Angaben.')}</dd></dl></details></article>`;
+  return `<article class="stand-card"><div class="stand-card-top"><h3>${escapeHtml(heading)}</h3><button class="favorite-toggle ${liked?'active':''}" data-fav="${escapeHtml(s.id)}" aria-label="${liked?'Aus Favoriten entfernen':'Zu Favoriten hinzufügen'}: ${escapeHtml(heading)}">${liked?'★':'☆'}</button></div><div class="tag-row">${(s.categories||[]).map(c=>`<span class="tag">${escapeHtml(c)}</span>`).join('')}</div>${s.food_available==='Ja'&&s.food_description?`<p class="card-desc"><strong>Verpflegung:</strong> ${escapeHtml(s.food_description)}</p>`:''}<details class="stand-public-details" data-stand-id="${escapeHtml(s.id)}" ${expanded?'open':''}><summary>Standdetails</summary><dl><dt>Alle Angebote</dt><dd>${(s.categories||[]).length?`<ul>${s.categories.map(category=>`<li>${escapeHtml(category)}</li>`).join('')}</ul>`:'Keine Angaben.'}</dd><dt>Verpflegung</dt><dd>${s.food_available==='Ja'?escapeHtml(s.food_description||'Verpflegung wird angeboten.'):'Keine Verpflegung.'}</dd></dl></details></article>`;
 }
 function renderStands(){
   const expanded=new Set($$('.stand-public-details[open]').map(element=>element.dataset.standId));
@@ -376,8 +376,6 @@ if(window.L){
   $('#mapCanvas').innerHTML='<div class="map-unavailable"><strong>Karte gerade nicht verfügbar</strong><span>Die Ortskarte braucht eine Internetverbindung.</span><a href="https://www.openstreetmap.org/?mlat=49.3186&mlon=8.3886#map=15/49.3186/8.3886" target="_blank" rel="noreferrer">Dudenhofen auf OpenStreetMap öffnen ↗</a></div>';
 }
 function updateMapStandCount(){
-  const count=townMap?standPinMarkers.length:0;
-  $('#standCount').textContent=String(count);
   const selection=stands.filter(matches);
   $('#standSelectionCount').textContent=String(selection.length);
   $('#standFoodCount').textContent=String(selection.filter(stand=>stand.food_available==='Ja').length);
