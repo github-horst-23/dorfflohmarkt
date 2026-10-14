@@ -28,7 +28,7 @@ button,.primary-button,.secondary-button,.nav-link{touch-action:manipulation}
   .content-wrap{padding-left:13px;padding-right:13px}
   .map-card{padding:9px;border-radius:12px}
   .map-canvas.real-map{height:min(108svh,860px);min-height:640px}
-  .map-toolbar{position:sticky;top:60px;z-index:5;background:var(--paper)}
+  .map-toolbar{position:relative;background:var(--paper)}
   .map-search input{height:44px;font-size:12px}
   .filter-button{min-width:44px}
   .map-caption{gap:8px;font-size:8px;line-height:1.45}
@@ -341,3 +341,22 @@ h1.page-title{margin:0 0 22px;font:600 clamp(27px,3.4vw,38px)/1.12 Manrope,sans-
 @media(max-width:560px){.header-actions{gap:3px}.topbar{gap:7px}.brand{gap:6px}}
 @media(prefers-reduced-motion:reduce){.header-refresh.is-refreshing svg{animation:none}}
 @media(max-width:380px){.drawer{padding-left:18px;padding-right:18px}.drawer-brand{gap:8px}.drawer-brand .drawer-logo{width:36px;height:44px}.drawer-brand strong{font-size:clamp(10px,3.6vw,12px)}}
+
+/* Keep search and all filter rows together in normal flow above Leaflet. */
+.map-card{min-width:0}
+.map-controls{position:relative;z-index:1;isolation:isolate;background:var(--paper);margin-bottom:12px}
+.map-controls .filters{position:relative;margin-bottom:0;max-width:100%}
+.map-search{min-width:0}
+.map-search input{min-width:0}
+.map-search>span,.map-search>button,.filter-button{flex-shrink:0}
+@media(max-width:560px){
+  .map-controls .map-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;position:relative;top:auto;z-index:auto;gap:8px}
+  .map-controls .map-search{padding:0 9px;gap:6px}
+  .map-controls .map-search input{font-size:16px}
+  .map-controls .filter-button{min-height:44px;padding:0 12px;white-space:nowrap}
+  .map-controls .filter-button span{display:inline;font-size:12px}
+  .map-controls .filters.show{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .map-controls .filter-chip{min-width:0;min-height:44px;max-width:100%;padding:9px 10px;font-size:12px;line-height:1.4;white-space:normal;overflow-wrap:anywhere}
+  .map-controls [data-filter="Spiele, Musik, Elektronik"]{grid-column:1 / -1}
+  .map-controls .filter-features{grid-column:1 / -1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;min-width:0;padding-top:4px}
+}
