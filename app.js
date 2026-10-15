@@ -80,6 +80,7 @@ $('#adminManualFormHost').append(adminManualForm);
 const adminManualStatus=document.createElement('p');
 adminManualStatus.className='admin-message';adminManualStatus.setAttribute('role','status');
 $('#adminManualFormHost').append(adminManualStatus);
+
 const countdownTimer=$('#countdownTimer');
 let marketDay=new Date(2027,8,1,0,0,0);
 let marketDayEnd=new Date(2027,8,2,0,0,0);
