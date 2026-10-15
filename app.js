@@ -423,24 +423,65 @@ if(townMap)locateStandAddresses(stands);
 setInterval(()=>{if(townMap)locateStandAddresses(stands)},3600000);
 
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
-  let hadServiceWorkerController = Boolean(navigator.serviceWorker.controller);
-  let reloadingForUpdate = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    const firstController = !hadServiceWorkerController;
-    hadServiceWorkerController = true;
-    if (!firstController && !reloadingForUpdate) {
-      reloadingForUpdate = true;
-      location.reload();
+  const banner=$('#appUpdateNotice'),applyButton=$('#applyAppUpdate');
+  let registration=null,hadController=Boolean(navigator.serviceWorker.controller);
+  let applyRequested=false,reloading=false,controllerChanged=false,dismissedWorker=null,dismissedActive=false,lastCheckAt=0,checking=false;
+  const reloadApp=()=>{if(!reloading){reloading=true;location.reload()}};
+  function showAvailableUpdate(){
+    const waiting=registration?.waiting;
+    if((waiting&&waiting!==dismissedWorker)||(controllerChanged&&!dismissedActive)){
+      banner.hidden=false;applyButton.disabled=false;applyButton.textContent='Jetzt aktualisieren';
     }
+  }
+  $('#deferAppUpdate').addEventListener('click',()=>{
+    dismissedWorker=registration?.waiting;dismissedActive=controllerChanged;banner.hidden=true;
   });
-  window.addEventListener('load', async () => {
-    try {
-      const registration = await navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
-      await registration.update();
-    } catch (error) {
-      console.warn('App-Updateprüfung fehlgeschlagen.', error);
-    }
+  applyButton.addEventListener('click',()=>{
+    if(applyRequested)return;
+    if(controllerChanged){reloadApp();return}
+    const waiting=registration?.waiting;
+    if(!waiting){banner.hidden=true;return}
+    applyRequested=true;applyButton.disabled=true;applyButton.textContent='Wird aktualisiert …';
+    waiting.postMessage({type:'ACTIVATE_APP_UPDATE'});
+    setTimeout(()=>{
+      if(!reloading){applyRequested=false;applyButton.disabled=false;applyButton.textContent='Erneut aktualisieren'}
+    },15000);
   });
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    const wasControlled=hadController;hadController=true;
+    if(!wasControlled)return; // First installation is not an available update.
+    if(applyRequested)reloadApp();
+    else{controllerChanged=true;showAvailableUpdate()} // Another tab accepted the update.
+  });
+  async function checkForAppUpdate({remind=false}={}){
+    if(remind){dismissedWorker=null;dismissedActive=false}
+    showAvailableUpdate();
+    if(!registration||checking||navigator.onLine===false||document.visibilityState==='hidden'||Date.now()-lastCheckAt<60000)return;
+    checking=true;lastCheckAt=Date.now();
+    try{await registration.update();showAvailableUpdate()}
+    catch{console.warn('App-Updateprüfung derzeit nicht verfügbar.')}
+    finally{checking=false}
+  }
+  function watchInstallingWorker(worker){
+    if(!worker)return;
+    worker.addEventListener('statechange',()=>{
+      if(worker.state==='installed')setTimeout(showAvailableUpdate,0);
+    });
+  }
+  async function registerAppWorker(){
+    try{
+      registration=await navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'});
+      registration.addEventListener('updatefound',()=>watchInstallingWorker(registration.installing));
+      watchInstallingWorker(registration.installing);showAvailableUpdate();
+      await checkForAppUpdate();
+    }catch{console.warn('App-Updateprüfung derzeit nicht verfügbar.')}
+  }
+  if(document.readyState==='complete')registerAppWorker();
+  else window.addEventListener('load',registerAppWorker,{once:true});
+  window.addEventListener('online',()=>{lastCheckAt=0;checkForAppUpdate({remind:true})});
+  window.addEventListener('pageshow',()=>checkForAppUpdate({remind:true}));
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkForAppUpdate({remind:true})});
+  setInterval(checkForAppUpdate,60000);
 }
 
 let installPrompt;

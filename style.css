@@ -378,3 +378,11 @@ h1.page-title{margin:0 0 22px;font:600 clamp(27px,3.4vw,38px)/1.12 Manrope,sans-
 .basemap-status[hidden]{display:none}
 .map-caption{justify-content:flex-end}
 .map-caption span:last-child{max-width:100%}
+
+.app-update-notice{position:sticky;top:78px;z-index:14;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:15px max(calc((100% - 1068px)/2),5.5%);background:#fff9d5;border-bottom:1px solid #e1ce75;color:var(--ink)}
+.app-update-notice[hidden]{display:none}
+.app-update-notice strong{font-size:14px}
+.app-update-notice p{margin:5px 0 0;font-size:12px;line-height:1.5}
+.app-update-actions{display:flex;flex-shrink:0;gap:8px}
+.app-update-actions button{min-height:44px}
+@media(max-width:560px){.app-update-notice{top:calc(60px + env(safe-area-inset-top));padding:12px 13px;align-items:stretch;flex-direction:column;gap:10px}.app-update-actions{flex-wrap:wrap}}

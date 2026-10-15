@@ -1,9 +1,9 @@
-const CACHE_NAME = 'dorfflohmarkt-v49';
+const CACHE_NAME = 'dorfflohmarkt-v50';
 const APP_FILES = [
   './',
   './index.html',
-  './style.css',
-  './app.js',
+  './style.css?update-notice=1',
+  './app.js?update-notice=1',
   './routing-client.js',
   './supabase-config.js',
   './geocoding-config.js',
@@ -18,14 +18,18 @@ const APP_FILES = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_FILES)));
-  self.skipWaiting();
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) =>
+    cache.addAll(APP_FILES.map(path => new Request(path, { cache: 'reload' })))));
+});
+
+self.addEventListener('message', event => {
+  if (event.data?.type === 'ACTIVATE_APP_UPDATE') event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => Promise.all(
-      keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+      keys.filter((key) => key.startsWith('dorfflohmarkt-') && key !== CACHE_NAME).map((key) => caches.delete(key))
     ))
   );
   self.clients.claim();
@@ -38,15 +42,15 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.endsWith('/supabase-config.js') || url.pathname.endsWith('/geocoding-config.js')) return;
 
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).then((response) => {
-      const copy = response.clone();
-      caches.open(CACHE_NAME).then((cache) => cache.put('./index.html', copy));
-      return response;
-    }).catch(() => caches.match('./index.html')));
+    const rootPath = new URL('./', self.location.href).pathname;
+    if (url.pathname !== rootPath && url.pathname !== rootPath + 'index.html') return;
+    // Keep HTML and scripts from the same installed release while an update waits.
+    event.respondWith(caches.open(CACHE_NAME).then(async cache =>
+      (await cache.match('./index.html')) || fetch(request)));
     return;
   }
 
-  event.respondWith(caches.match(request).then((cached) => cached || fetch(request).then((response) => {
+  event.respondWith(caches.open(CACHE_NAME).then(cache => cache.match(request)).then((cached) => cached || fetch(request).then((response) => {
     if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
     return response;
   })));
