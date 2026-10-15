@@ -27,7 +27,7 @@ button,.primary-button,.secondary-button,.nav-link{touch-action:manipulation}
   .hero-art{height:215px}
   .content-wrap{padding-left:13px;padding-right:13px}
   .map-card{padding:9px;border-radius:12px}
-  .map-canvas.real-map{height:min(108svh,860px);min-height:640px}
+  .map-canvas.real-map{height:clamp(300px,60vh,520px);height:clamp(300px,60svh,520px);min-height:0}
   .map-toolbar{position:relative;background:var(--paper)}
   .map-search input{height:44px;font-size:12px}
   .filter-button{min-width:44px}
@@ -386,3 +386,13 @@ h1.page-title{margin:0 0 22px;font:600 clamp(27px,3.4vw,38px)/1.12 Manrope,sans-
 .app-update-actions{display:flex;flex-shrink:0;gap:8px}
 .app-update-actions button{min-height:44px}
 @media(max-width:560px){.app-update-notice{top:calc(60px + env(safe-area-inset-top));padding:12px 13px;align-items:stretch;flex-direction:column;gap:10px}.app-update-actions{flex-wrap:wrap}}
+
+/* Compact map on phones in landscape, including screens wider than 560px. */
+@media(max-width:1000px) and (max-height:560px) and (orientation:landscape) and (pointer:coarse){
+  .map-canvas.real-map{height:clamp(200px,58vh,340px);height:clamp(200px,58svh,340px);min-height:0}
+}
+
+.drawer .app-update-nav{width:calc(100% + 28px);border:0;background:transparent;text-align:left;font-family:inherit;min-height:48px}
+.drawer .app-update-nav:hover{background:#eaf0fb}
+.drawer .app-update-nav[hidden]{display:none}
+.drawer .app-update-dot{width:10px;height:10px;flex:0 0 10px;margin-left:auto;border-radius:50%;background:var(--lime);box-shadow:0 0 0 3px #fff7a8}

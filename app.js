@@ -346,6 +346,14 @@ const locateStandAddresses=window.createStandGeocoder({
 });
 if(window.L){
   townMap=L.map('mapCanvas').setView([49.3186,8.3886],15);
+  if('ResizeObserver' in window){
+    let mapResizeFrame=0;
+    const mapResizeObserver=new ResizeObserver(()=>{
+      cancelAnimationFrame(mapResizeFrame);
+      mapResizeFrame=requestAnimationFrame(()=>{if($('#mapCanvas').clientWidth&&$('#mapCanvas').clientHeight)townMap.invalidateSize({pan:false})});
+    });
+    mapResizeObserver.observe($('#mapCanvas'));
+  }
   const streetLayer=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(townMap);
   const aerialLayer=L.tileLayer.wms('https://geo4.service24.rlp.de/wms/rp_dop20.fcgi',{
     layers:'rp_dop20',format:'image/png',transparent:false,version:'1.1.1',maxZoom:19,
@@ -423,16 +431,24 @@ if(townMap)locateStandAddresses(stands);
 setInterval(()=>{if(townMap)locateStandAddresses(stands)},3600000);
 
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
-  const banner=$('#appUpdateNotice'),applyButton=$('#applyAppUpdate');
+  const banner=$('#appUpdateNotice'),applyButton=$('#applyAppUpdate'),updateNav=$('#openAppUpdate');
   let registration=null,hadController=Boolean(navigator.serviceWorker.controller);
   let applyRequested=false,reloading=false,controllerChanged=false,dismissedWorker=null,dismissedActive=false,lastCheckAt=0,checking=false;
   const reloadApp=()=>{if(!reloading){reloading=true;location.reload()}};
   function showAvailableUpdate(){
     const waiting=registration?.waiting;
+    updateNav.hidden=!(waiting||controllerChanged);
+    updateNav.disabled=applyRequested;
+    if(applyRequested)return;
     if((waiting&&waiting!==dismissedWorker)||(controllerChanged&&!dismissedActive)){
       banner.hidden=false;applyButton.disabled=false;applyButton.textContent='Jetzt aktualisieren';
     }
   }
+  updateNav.addEventListener('click',()=>{
+    dismissedWorker=null;dismissedActive=false;
+    closeDrawer();showAvailableUpdate();
+    if(!banner.hidden)applyButton.focus({preventScroll:true});
+  });
   $('#deferAppUpdate').addEventListener('click',()=>{
     dismissedWorker=registration?.waiting;dismissedActive=controllerChanged;banner.hidden=true;
   });
@@ -444,7 +460,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     applyRequested=true;applyButton.disabled=true;applyButton.textContent='Wird aktualisiert …';
     waiting.postMessage({type:'ACTIVATE_APP_UPDATE'});
     setTimeout(()=>{
-      if(!reloading){applyRequested=false;applyButton.disabled=false;applyButton.textContent='Erneut aktualisieren'}
+      if(!reloading){applyRequested=false;showAvailableUpdate();applyButton.textContent='Erneut aktualisieren'}
     },15000);
   });
   navigator.serviceWorker.addEventListener('controllerchange',()=>{
