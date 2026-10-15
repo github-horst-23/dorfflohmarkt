@@ -10,6 +10,10 @@ const geocodingDiagnostics=new Map(),geocodingRetries=new Set();
 let publishedStandListReady=false;
 const supabaseConfig=window.DORFFLOHMARKT_SUPABASE||{};
 const supabaseClient=window.supabase?.createClient&&supabaseConfig.url&&supabaseConfig.anonKey?window.supabase.createClient(supabaseConfig.url,supabaseConfig.anonKey):null;
+// Public stand reads must not depend on an expired admin session or its auth lock.
+const publicStandClient=supabaseClient?window.supabase.createClient(supabaseConfig.url,supabaseConfig.anonKey,{
+  auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false,storageKey:'dorfflohmarkt-public-stands'}
+}):null;
 const getFavs=()=>{try{const saved=JSON.parse(localStorage.getItem('dorfflohmarkt-favs')||'[]');return Array.isArray(saved)?[...new Set(saved.filter(id=>typeof id==='string').map(id=>legacyStandIds[id]||id))]:[]}catch{return []}};
 let favorites=getFavs(),activeFilter='Alle',search='';
 const favoriteRouter=window.createFavoriteRouter();
@@ -106,7 +110,7 @@ function updateCountdown(){
 }
 updateCountdown();
 setInterval(updateCountdown,1000);
-function saveFavs(){localStorage.setItem('dorfflohmarkt-favs',JSON.stringify(favorites));renderCounts();renderStands();}
+function saveFavs(){try{localStorage.setItem('dorfflohmarkt-favs',JSON.stringify(favorites))}catch{console.warn('Favoriten können derzeit nur im Arbeitsspeicher gehalten werden.')}renderCounts();renderStands();}
 function renderCounts(){$('#drawerFavCount').textContent=favorites.length;$('#favoritesSummary').textContent=`${favorites.length} ${favorites.length===1?'Stand':'Stände'}`}
 function mainCategory(category){
   const value=String(category).trim();
@@ -520,24 +524,51 @@ window.addEventListener('appinstalled', () => {
 });
 
 // Öffentliche Live-Liste und Moderation via Supabase Auth + Row Level Security.
-let standRefreshSequence=0;
-let lastStandRefreshAt=0;
-async function loadPublishedStands({retryGeocoding=false,geocodeAddress=null}={}){
-  if(!supabaseClient)return false;
-  const sequence=++standRefreshSequence;
-  lastStandRefreshAt=Date.now();
-  const rows=[];
-  let offset=0;
+let standRefreshSequence=0,lastStandRefreshAt=0;
+let standRowsRequest=null,standRetryTimer=null,standReloadQueued=false;
+async function readPublishedStandRows(){
+  const rows=[];let offset=0;
   for(;;){
-    const {data,error,count}=await supabaseClient.from('published_stands')
-      .select('id,created_at,address,categories,food_available,food_description,description,lat,lng',{count:'exact'})
-      .order('created_at',{ascending:true}).order('id',{ascending:true}).range(offset,offset+499);
-    if(sequence!==standRefreshSequence)return null;
-    if(error){console.warn('Freigegebene Stände konnten nicht geladen werden.');return false}
-    const page=data||[];
+    let result=null;
+    for(let attempt=0;attempt<3;attempt++){
+      if(navigator.onLine===false)return null;
+      const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
+      try{
+        result=await publicStandClient.from('published_stands')
+          .select('id,created_at,address,categories,food_available,food_description,description,lat,lng',{count:'exact'})
+          .order('created_at',{ascending:true}).order('id',{ascending:true}).range(offset,offset+499).abortSignal(controller.signal);
+      }catch{result={error:true,status:0}}
+      finally{clearTimeout(timer)}
+      if(!result.error)break;
+      const transient=!result.status||[408,429].includes(result.status)||result.status>=500;
+      if(!transient||attempt===2)return null;
+      await new Promise(resolve=>setTimeout(resolve,750*(attempt+1)));
+    }
+    if(!Array.isArray(result?.data))return null;
+    const {data:page,count}=result;
     rows.push(...page);offset+=page.length;
-    if(!page.length||(Number.isFinite(count)&&offset>=count)||(!Number.isFinite(count)&&page.length<500))break;
+    if(!page.length||(Number.isFinite(count)&&offset>=count)||(!Number.isFinite(count)&&page.length<500))return rows;
   }
+}
+function fetchPublishedStandRows(){
+  if(!standRowsRequest)standRowsRequest=readPublishedStandRows().catch(()=>null).finally(()=>{standRowsRequest=null});
+  return standRowsRequest;
+}
+function scheduleStandRetry(){
+  if(standRetryTimer)return;
+  standRetryTimer=setTimeout(()=>{
+    standRetryTimer=null;
+    if(document.visibilityState==='visible'&&navigator.onLine!==false)loadPublishedStands();
+  },30000);
+}
+async function loadPublishedStands({retryGeocoding=false,geocodeAddress=null}={}){
+  if(!publicStandClient)return false;
+  const sequence=++standRefreshSequence;
+  const rows=await fetchPublishedStandRows();
+  if(sequence!==standRefreshSequence)return null;
+  if(rows===null){scheduleStandRetry();console.warn('Standdaten derzeit nicht erreichbar; vorhandene Daten bleiben erhalten.');return false}
+  clearTimeout(standRetryTimer);standRetryTimer=null;
+  lastStandRefreshAt=Date.now();
   const previous=new Map(stands.map(stand=>[stand.id,stand]));
   stands=[...new Map(rows.map(row=>[row.id,row])).values()].map(row=>{
     const saved=previous.get(row.id);
@@ -551,17 +582,23 @@ async function loadPublishedStands({retryGeocoding=false,geocodeAddress=null}={}
   renderGeocodingReport();
   saveFavs();
   if(!$('#adminDashboard').hidden)renderAdminPublishedStands(stands);
+  try{
   const priorityAddress=geocodeAddress||manualStandGeocodingAddress;
   if(priorityAddress){
     // The saved address goes first; geocoding also runs if Leaflet is unavailable.
     await locateStandAddresses(stands.filter(stand=>stand.address===priorityAddress),{retry:retryGeocoding});
     void locateStandAddresses(stands);
   }else await locateStandAddresses(stands,{retry:retryGeocoding});
+  }catch{console.warn('Standdaten geladen; Kartenpositionen konnten noch nicht vollständig aktualisiert werden.')}
   return true;
 }
 if(supabaseClient){
   loadPublishedStands();
-  supabaseClient.channel('published-stands-live').on('postgres_changes',{event:'*',schema:'public',table:'published_stands'},loadPublishedStands).subscribe();
+  supabaseClient.channel('published-stands-live').on('postgres_changes',{event:'*',schema:'public',table:'published_stands'},()=>{
+    if(standRowsRequest){
+      if(!standReloadQueued){standReloadQueued=true;standRowsRequest.then(()=>{standReloadQueued=false;loadPublishedStands()})}
+    }else loadPublishedStands();
+  }).subscribe(status=>{if(status==='SUBSCRIBED')loadPublishedStands()});
   const refreshIfStale=()=>{if(Date.now()-lastStandRefreshAt>3000)loadPublishedStands()};
   window.addEventListener('pageshow',refreshIfStale);
   window.addEventListener('online',loadPublishedStands);
@@ -836,11 +873,11 @@ $('#refreshStands').addEventListener('click',async event=>{
   button.disabled=true;button.classList.add('is-refreshing');button.setAttribute('aria-busy','true');
   try{
     const loaded=await loadPublishedStands({retryGeocoding:true});
-    if(loaded===false){toast('Standdaten konnten nicht geladen werden. Bitte erneut versuchen.');return}
-    await refreshPendingApplicationCount();
-    await loadEventSettings();
-    if(!adminDashboard.hidden)await loadApplications();
-    toast(loaded===null?'Standdaten werden bereits aktualisiert.':'Standdaten aktualisiert.');
+    if(loaded===false){toast(navigator.onLine===false?'Du bist offline. Vorhandene Standdaten bleiben sichtbar; bei Netzrückkehr wird automatisch aktualisiert.':'Standdaten sind gerade nicht erreichbar. Vorhandene Daten bleiben sichtbar; die App versucht es automatisch erneut.');return}
+    const tasks=[refreshPendingApplicationCount(),loadEventSettings()];
+    if(!adminDashboard.hidden)tasks.push(loadApplications());
+    const additional=await Promise.allSettled(tasks);
+    toast(loaded===null?'Standdaten werden bereits aktualisiert.':additional.some(result=>result.status==='rejected')?'Standdaten aktualisiert. Zusätzliche Informationen konnten noch nicht vollständig geladen werden.':'Standdaten aktualisiert.');
   }catch{toast('Standdaten konnten nicht geladen werden. Bitte erneut versuchen.')}
   finally{button.disabled=false;button.classList.remove('is-refreshing');button.setAttribute('aria-busy','false')}
 });
