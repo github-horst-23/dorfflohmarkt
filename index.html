@@ -17,9 +17,10 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 </head>
 <body>
+  <div class="test-version-watermark" aria-hidden="true"></div>
   <header class="topbar">
     <button class="menu-button" id="menuButton" aria-label="Menü öffnen" aria-expanded="false"><span></span><span></span><span></span></button>
-    <a class="brand" href="#karte" aria-label="Dorfflohmarkt Startseite"><img class="brand-logo" src="ovd-logo.png" alt=""><span><strong>DORFFLOHMARKT</strong><small>DUDENHOFEN</small></span></a>
+    <a class="brand" href="#karte" aria-label="Dorfflohmarkt Startseite"><img class="brand-logo" src="ovd-logo.png" alt=""><span><strong>DORFFLOHMARKT</strong><small>DUDENHOFEN</small><span class="test-version-badge">TESTVERSION</span></span></a>
     <div class="header-actions"><button class="install-button" id="installButton" type="button" hidden>App installieren</button><button class="header-refresh" id="refreshStands" type="button" aria-label="Standdaten aus Supabase aktualisieren" aria-busy="false" title="Standdaten aktualisieren"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9c2.52 0 4.93 1 6.74 2.74L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9c-2.52 0-4.93-1-6.74-2.74L3 16M8 16H3v5"/></svg></button></div>
   </header>
   <aside id="appUpdateNotice" class="app-update-notice" aria-label="App-Aktualisierung" hidden><div role="status"><strong>Neue App-Version verfügbar</strong><p>Du kannst die neue Version jetzt laden. Nicht gespeicherte Formulareingaben gehen beim Neuladen verloren.</p></div><div class="app-update-actions"><button id="applyAppUpdate" class="primary-button" type="button">Jetzt aktualisieren</button><button id="deferAppUpdate" class="secondary-button" type="button">Später</button></div></aside>

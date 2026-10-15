@@ -396,3 +396,8 @@ h1.page-title{margin:0 0 22px;font:600 clamp(27px,3.4vw,38px)/1.12 Manrope,sans-
 .drawer .app-update-nav:hover{background:#eaf0fb}
 .drawer .app-update-nav[hidden]{display:none}
 .drawer .app-update-dot{width:10px;height:10px;flex:0 0 10px;margin-left:auto;border-radius:50%;background:var(--lime);box-shadow:0 0 0 3px #fff7a8}
+
+/* Keep the diagonal watermark separate from the compact header badge. */
+.test-version-watermark{position:fixed;inset:0;z-index:10000;pointer-events:none;user-select:none;overflow:hidden}
+.test-version-watermark::before{content:'TESTVERSION';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-25deg);font:800 clamp(36px,11vw,150px)/1 'DM Sans',sans-serif;letter-spacing:.08em;color:rgba(23,73,165,.16);white-space:nowrap}
+.brand .test-version-badge{display:inline-block;margin-top:3px;padding:2px 5px;border:1px solid #1749a5;border-radius:4px;background:#fff000;color:#103578;font:700 9px/1.2 'DM Sans',sans-serif;letter-spacing:.1em;white-space:nowrap}
