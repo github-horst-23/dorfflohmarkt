@@ -284,7 +284,7 @@ $('#registrationForm').addEventListener('submit',async e=>{
   if(!supabaseClient){toast('Die Anmeldung ist noch nicht verfügbar: Supabase ist nicht eingerichtet.');return}
   await loadEventSettings();
   if(registrationSubmitted||form.dataset.submitting==='true')return;
-  if(registrationOpen!==true&&!(registrationOpen===false&&lateRegistrationToken)){toast(registrationOpen===false?'Bitte zuerst einen gültigen Nachzügler-Token eingeben.':'Die Anmeldung ist gerade nicht verfügbar. Bitte später erneut versuchen.');return}
+  if(registrationOpen!==true&&!(registrationOpen===false&&lateRegistrationToken)){toast(registrationOpen===false?'Bitte zuerst einen gültigen Anmeldecode eingeben.':'Die Anmeldung ist gerade nicht verfügbar. Bitte später erneut versuchen.');return}
   const data=new FormData(form);
   const categories=data.getAll('category');
   const otherOffer=data.get('otherOffer')?.trim();
@@ -294,14 +294,14 @@ $('#registrationForm').addEventListener('submit',async e=>{
   if(registrationOpen===false)application.late_registration_token=lateRegistrationToken;
   const submitButton=form.querySelector('.submit-button');
   form.dataset.submitting='true';submitButton.disabled=true;
-  let error;
-  try{({error}=await supabaseClient.from('stand_registrations').insert(application))}
+  let error,receipt;
+  try{({data:receipt,error}=await supabaseClient.rpc('register_with_phrase',{p_data:application}))}
   catch{error={message:'unavailable'}}
   finally{form.dataset.submitting='false';submitButton.disabled=false}
   if(error){
-    if(error.message?.includes('late_token_invalid_or_used')){lateRegistrationToken='';renderRegistrationAvailability();$('#lateTokenMessage').textContent='Der Token ist ungültig oder wurde bereits verwendet. Bitte einen neuen Token beim Ortsverein anfragen.';toast('Der Token ist ungültig oder bereits verwendet.')}
+    if(error.message?.includes('late_token_invalid_or_used')){lateRegistrationToken='';renderRegistrationAvailability();$('#lateTokenMessage').textContent='Der Anmeldecode ist ungültig oder wurde bereits verwendet. Bitte einen neuen Anmeldecode beim Ortsverein anfragen.';toast('Der Anmeldecode ist ungültig oder bereits verwendet.')}
     else if(error.message?.includes('late_tokens_closed_only')){await loadEventSettings();toast('Die Anmeldung ist wieder geöffnet. Bitte erneut absenden.')}
-    else if(error.message?.includes('registrations_closed')){await loadEventSettings();toast('Zurzeit werden Anmeldungen nur mit Nachzügler-Token angenommen.')}
+    else if(error.message?.includes('registrations_closed')){await loadEventSettings();toast('Zurzeit werden Anmeldungen nur mit Anmeldecode angenommen.')}
     else toast('Die Anmeldung konnte nicht gesendet werden. Bitte versuche es später erneut.');
     return;
   }
@@ -311,6 +311,10 @@ $('#registrationForm').addEventListener('submit',async e=>{
   refreshPendingApplicationCount();
   const name=escapeHtml(application.first_name);
   form.innerHTML=`<div class="success-state"><span class="success-icon">✓</span><p class="eyebrow">ANMELDUNG EINGEGANGEN</p><h2>Danke, ${name}!</h2><p>Deine Anmeldung wurde an den Ortsverein übermittelt. Sobald ein Admin sie geprüft und freigegeben hat, erscheint dein Stand in der Karte.</p><button class="secondary-button" type="button" id="backToMap">Zur Karte <span>↗</span></button></div>`;
+  const receiptInfo=document.createElement('div');
+  receiptInfo.innerHTML=`<h3>Deine Anmeldebestätigung</h3><p>Bewahre diese Angaben für eine spätere Abmeldung sicher auf. Die persönliche Abmeldephrase wird nur jetzt angezeigt.</p><p>Anmeldenummer: <strong>${escapeHtml(receipt.registration_id)}</strong></p><p>Abmeldephrase: <strong>${escapeHtml(receipt.keyphrase)}</strong></p>`;
+  const download=document.createElement('button');download.type='button';download.className='secondary-button';download.textContent='Anmeldebestätigung als PDF herunterladen';
+  download.addEventListener('click',()=>downloadRegistrationPdf(application,receipt));receiptInfo.append(download);form.querySelector('.success-state').append(receiptInfo);
   form.querySelector('#backToMap').addEventListener('click',()=>showPage('karte'));
 });
 
@@ -624,7 +628,7 @@ function renderRegistrationAvailability(){
   if(registrationOpen===true){lateRegistrationToken='';$('#lateTokenInput').value='';}
   const tokenAccess=registrationOpen===false&&Boolean(lateRegistrationToken);
   notice.hidden=registrationSubmitted||registrationOpen===true;
-  notice.textContent=tokenAccess?'Dein Nachzügler-Token ist freigeschaltet. Er wird erst beim erfolgreichen Absenden verbraucht.':registrationOpen===false?'Die reguläre Anmeldung ist geschlossen. Mit einem Nachzügler-Token vom Ortsverein kannst du dich noch einmalig anmelden.':'Die Anmeldung ist gerade nicht verfügbar. Bitte später erneut versuchen.';
+  notice.textContent=tokenAccess?'Dein Anmeldecode ist freigeschaltet. Er wird erst beim erfolgreichen Absenden verbraucht.':registrationOpen===false?'Die reguläre Anmeldung ist geschlossen. Für eine nachträgliche Anmeldung kontaktiere flohmarkt@dudenhofen.org. Deinen persönlichen Anmeldecode kannst du unten eingeben.':'Die Anmeldung ist gerade nicht verfügbar. Bitte später erneut versuchen.';
   form.hidden=!registrationSubmitted&&registrationOpen!==true&&!tokenAccess;
   $('#lateTokenForm').hidden=registrationSubmitted||registrationOpen!==false||tokenAccess;
   $('#createLateToken').disabled=lateTokenCreating||registrationOpen!==false;
@@ -638,17 +642,17 @@ $('#lateTokenForm').addEventListener('submit',async event=>{
   if(lateTokenChecking||!supabaseClient||!event.currentTarget.reportValidity())return;
   const button=event.currentTarget.querySelector('button');
   lateTokenChecking=true;button.disabled=true;
-  const message=$('#lateTokenMessage');message.textContent='Token wird geprüft …';
+  const message=$('#lateTokenMessage');message.textContent='Anmeldecode wird geprüft …';
   try{
     await loadEventSettings();
     if(registrationOpen!==false){message.textContent='Die reguläre Anmeldung ist geöffnet; du benötigst keinen Token.';return}
     const token=$('#lateTokenInput').value.trim().toUpperCase();
     const {data,error}=await supabaseClient.rpc('validate_late_registration_token',{p_token:token});
-    if(error){message.textContent='Der Token konnte gerade nicht geprüft werden. Bitte erneut versuchen.';return}
-    if(data!==true){message.textContent='Der Token ist ungültig oder wurde bereits verwendet.';return}
+    if(error){message.textContent='Der Anmeldecode konnte gerade nicht geprüft werden. Bitte erneut versuchen.';return}
+    if(data!==true){message.textContent='Der Anmeldecode ist ungültig oder wurde bereits verwendet.';return}
     lateRegistrationToken=token;message.textContent='';renderRegistrationAvailability();
     $('#registrationForm').querySelector('input').focus();
-  }catch{message.textContent='Der Token konnte gerade nicht geprüft werden. Bitte erneut versuchen.'}
+  }catch{message.textContent='Der Anmeldecode konnte gerade nicht geprüft werden. Bitte erneut versuchen.'}
   finally{lateTokenChecking=false;button.disabled=false}
 });
 $('#createLateToken').addEventListener('click',async()=>{
@@ -660,12 +664,12 @@ $('#createLateToken').addEventListener('click',async()=>{
     if(sessionVersion!==adminSessionVersion||adminDashboard.hidden)return;
     if(error||typeof data!=='string'){
       if(error?.message?.includes('late_tokens_closed_only')){await loadEventSettings();toast('Tokens sind nur bei geschlossener Anmeldung verfügbar.')}
-      else toast('Der Token konnte nicht erzeugt werden. Bitte Adminzugriff und Verbindung prüfen.');
+      else toast('Der Anmeldecode konnte nicht erzeugt werden. Bitte Adminzugriff und Verbindung prüfen.');
       return;
     }
     $('#generatedLateToken').value=data;$('#lateTokenOutput').hidden=false;
     toast('Einmaligen Token erzeugt. Bitte jetzt kopieren.');
-  }catch{toast('Der Token konnte gerade nicht erzeugt werden.')}
+  }catch{toast('Der Anmeldecode konnte gerade nicht erzeugt werden.')}
   finally{lateTokenCreating=false;renderRegistrationAvailability()}
 });
 $('#copyLateToken').addEventListener('click',async()=>{
@@ -781,8 +785,8 @@ async function refreshAdmin(){
   if(adminSessionId!==(session?.user.id||null)){adminSessionId=session?.user.id||null;adminSessionVersion++;pendingCountSequence++;$('#generatedLateToken').value='';$('#lateTokenOutput').hidden=true;}
   adminLoginForm.hidden=Boolean(session);adminDashboard.hidden=!session;
   renderGeocodingReport();
-  if(session){loadApplications();loadAdminPublishedStands();loadEventSettings()}
-  else{setPendingApplicationCount(null);adminApplications.innerHTML='';$('#generatedLateToken').value='';$('#lateTokenOutput').hidden=true}
+  if(session){loadApplications();loadAdminPublishedStands();loadEventSettings();loadWithdrawalRequests()}
+  else{setPendingApplicationCount(null);adminApplications.innerHTML='';$('#withdrawalRequests').textContent='';$('#exportStatus').textContent='';$('#generatedLateToken').value='';$('#lateTokenOutput').hidden=true}
 }
 adminLoginForm.addEventListener('submit',async e=>{
   e.preventDefault();if(!supabaseClient){adminStatus(adminLoginMessage,'Supabase ist noch nicht eingerichtet.');return}
@@ -884,3 +888,55 @@ $('#refreshStands').addEventListener('click',async event=>{
 });
 
 if(location.hash==='#admin')refreshAdmin();
+
+function downloadPrivateFile(content,type,name){
+  const url=URL.createObjectURL(new Blob([content],{type}));
+  const link=document.createElement('a');link.href=url;link.download=name;link.click();
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
+}
+function downloadRegistrationPdf(application,receipt){
+  const ascii=value=>String(value).replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/Ä/g,'Ae').replace(/Ö/g,'Oe').replace(/Ü/g,'Ue').replace(/ß/g,'ss').replace(/[^\x20-\x7e]/g,'?');
+  const labels={first_name:'Vorname',last_name:'Nachname',email:'E-Mail',address:'Standort',categories:'Angebote',food_available:'Verpflegung',food_description:'Verpflegungsangebot',description:'Beschreibung'};
+  const lines=['Dorfflohmarkt - Anmeldebestaetigung','Status: Zur Pruefung eingereicht',...Object.entries(application).filter(([key])=>!['late_registration_token','status'].includes(key)).map(([k,v])=>`${labels[k]||k}: ${Array.isArray(v)?v.join(', '):v}`),'Anmeldenummer: '+receipt.registration_id,'Persoenliche Abmeldephrase: '+receipt.keyphrase,'Sicher aufbewahren. Nicht oeffentlich weitergeben.','Abmeldung in der App unter Anmeldung anfragen.','Kontakt: flohmarkt@dudenhofen.org'].flatMap(line=>ascii(line).match(/.{1,85}(?:\s|$)|.{1,85}/g)||['']);
+  const pages=[];for(let i=0;i<lines.length;i+=43)pages.push(lines.slice(i,i+43));
+  const objects=['','<< /Type /Catalog /Pages 2 0 R >>','', '<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>'];
+  const kids=[];
+  for(const page of pages){const id=objects.length;const stream='BT /F1 10 Tf 42 800 Td 16 TL '+page.map((line,i)=>(i?'T* ':'')+'('+line.replace(/[\\()]/g,'\\$&')+') Tj').join('\n')+' ET';kids.push(`${id} 0 R`);objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents ${id+1} 0 R >>`,`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`)}
+  objects[2]=`<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${pages.length} >>`;
+  let pdf='%PDF-1.4\n',offsets=[0];for(let i=1;i<objects.length;i++){offsets.push(pdf.length);pdf+=`${i} 0 obj\n${objects[i]}\nendobj\n`}
+  const start=pdf.length;pdf+=`xref\n0 ${objects.length}\n0000000000 65535 f \n`+offsets.slice(1).map(offset=>String(offset).padStart(10,'0')+' 00000 n \n').join('')+`trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${start}\n%%EOF`;
+  downloadPrivateFile(pdf,'application/pdf','Dorfflohmarkt-Anmeldebestaetigung.pdf');
+}
+const withdrawalPanel=document.createElement('details');withdrawalPanel.className='admin-manual-entry';
+withdrawalPanel.innerHTML='<summary>Meinen Stand abmelden</summary><p>Dein Stand bleibt sichtbar, bis das Organisationsteam die Abmeldung bestätigt hat. Für ältere Anmeldungen ohne Abmeldephrase oder zur Löschung personenbezogener Daten schreibe an <a href="mailto:flohmarkt@dudenhofen.org">flohmarkt@dudenhofen.org</a>.</p><form id="withdrawalForm"><label>Anmeldenummer<input name="registrationId" required autocomplete="off"></label><label>Persönliche Abmeldephrase (zwei Wörter)<input name="phrase" required autocomplete="off" spellcheck="false"></label><button class="secondary-button" type="submit">Abmeldung anfragen</button><p role="status"></p></form>';
+$('#page-anmeldung .form-shell').append(withdrawalPanel);
+$('#withdrawalForm').addEventListener('submit',async event=>{
+  event.preventDefault();const form=event.currentTarget,button=form.querySelector('button'),message=form.querySelector('[role="status"]');button.disabled=true;
+  try{const data=new FormData(form);const {data:accepted,error}=await supabaseClient.rpc('request_withdrawal',{p_id:data.get('registrationId').trim(),p_phrase:data.get('phrase').trim()});
+    message.textContent=!error&&accepted?'Deine Abmeldung wurde zur Prüfung übermittelt. Der Stand wird nach Bestätigung entfernt.':'Die Angaben konnten nicht bestätigt werden. Prüfe deine Bestätigung oder versuche es später erneut. Kontakt: flohmarkt@dudenhofen.org';
+    if(accepted&&!error)form.reset();
+  }catch{message.textContent='Die Anfrage konnte nicht übermittelt werden. Bitte später erneut versuchen.'}finally{button.disabled=false}
+});
+async function loadWithdrawalRequests(){
+  const host=$('#withdrawalRequests');const {data,error}=await supabaseClient.rpc('admin_withdrawals');
+  if(error){host.textContent='Abmeldungen können nicht geladen werden. Bitte Supabase-Erweiterung prüfen.';return}
+  host.innerHTML=(data||[]).map(request=>`<article class="admin-application"><h3>${escapeHtml(request.address)}</h3><p>${escapeHtml(request.name)}</p><button type="button" data-withdraw-approve="${escapeHtml(request.id)}">Abmeldung bestätigen</button> <button type="button" data-withdraw-reject="${escapeHtml(request.id)}">Ablehnen</button></article>`).join('')||'Keine offenen Abmeldungen.';
+  host.querySelectorAll('button').forEach(button=>button.addEventListener('click',async()=>{
+    const approve=Boolean(button.dataset.withdrawApprove);if(approve&&!confirm('Abmeldung bestätigen und Stand aus der öffentlichen Ansicht entfernen?'))return;
+    button.disabled=true;const {error}=await supabaseClient.rpc('moderate_withdrawal',{p_id:button.dataset.withdrawApprove||button.dataset.withdrawReject,p_approve:approve});
+    if(error){toast('Abmeldung konnte nicht bearbeitet werden.');button.disabled=false;return}
+    await Promise.all([loadWithdrawalRequests(),loadApplications(),loadPublishedStands(),loadAdminPublishedStands()]);
+  }));
+}
+$('#exportStands').addEventListener('click',async event=>{
+  const button=event.currentTarget,status=$('#exportStatus');
+  if(!confirm('Vertrauliche Namen, E-Mail-Adressen und Standdaten exportieren? Speichere die Datei nur an einem geschützten Ort.'))return;
+  button.disabled=true;status.textContent='Export wird geladen …';
+  try{
+    const {data,error}=await supabaseClient.rpc('admin_export_stands');if(error)throw error;
+    const xml=value=>String(value??'').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    const sheet=(name,rows)=>{const keys=[...new Set(rows.flatMap(row=>Object.keys(row)))];const cell=value=>`<Cell><Data ss:Type="String">${xml(Array.isArray(value)?value.join(', '):value)}</Data></Cell>`;return `<Worksheet ss:Name="${name}"><Table><Row>${keys.map(cell).join('')}</Row>${rows.map(row=>'<Row>'+keys.map(key=>cell(row[key])).join('')+'</Row>').join('')}</Table></Worksheet>`};
+    const workbook='<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'+sheet('Anmeldungen',data.registrations||[])+sheet('Veröffentlichte Stände',data.published||[])+'</Workbook>';
+    downloadPrivateFile(workbook,'application/vnd.ms-excel','Dorfflohmarkt-Vertraulich.xls');status.textContent='Export erstellt. Enthält vertrauliche Daten; nicht weiterveröffentlichen.';
+  }catch{status.textContent='Export nicht verfügbar. Adminfreigabe und Supabase-Erweiterung prüfen.'}finally{button.disabled=false}
+});

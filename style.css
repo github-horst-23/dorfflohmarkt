@@ -401,3 +401,10 @@ h1.page-title{margin:0 0 22px;font:600 clamp(27px,3.4vw,38px)/1.12 Manrope,sans-
 .test-version-watermark{position:fixed;inset:0;z-index:10000;pointer-events:none;user-select:none;overflow:hidden}
 .test-version-watermark::before{content:'TESTVERSION';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-25deg);font:800 clamp(36px,11vw,150px)/1 'DM Sans',sans-serif;letter-spacing:.08em;color:rgba(23,73,165,.16);white-space:nowrap}
 .brand .test-version-badge{display:inline-block;margin-top:3px;padding:2px 5px;border:1px solid #1749a5;border-radius:4px;background:#fff000;color:#103578;font:700 9px/1.2 'DM Sans',sans-serif;letter-spacing:.1em;white-space:nowrap}
+.app-footer{gap:16px;flex-wrap:wrap;justify-content:center;line-height:1.5}.app-footer a{color:var(--green);font-size:12px}.app-footer>span{flex-basis:100%;text-align:center}
+#withdrawalForm{display:grid;gap:12px}#withdrawalForm label{display:grid;gap:6px}#withdrawalForm input{width:100%;min-width:0;padding:12px;border:1px solid var(--line);border-radius:7px;font-size:16px}
+.success-state strong{overflow-wrap:anywhere}
+
+.app-footer .footer-icon{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;flex:0 0 44px;padding:10px;border:1px solid var(--line);border-radius:50%;background:var(--paper);color:var(--green)}
+.footer-icon svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.footer-icon:hover{background:#eaf0fb}.footer-icon:focus-visible{outline:3px solid var(--green);outline-offset:3px}
