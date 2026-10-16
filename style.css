@@ -408,3 +408,9 @@ h1.page-title{margin:0 0 22px;font:600 clamp(27px,3.4vw,38px)/1.12 Manrope,sans-
 .app-footer .footer-icon{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;flex:0 0 44px;padding:10px;border:1px solid var(--line);border-radius:50%;background:var(--paper);color:var(--green)}
 .footer-icon svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .footer-icon:hover{background:#eaf0fb}.footer-icon:focus-visible{outline:3px solid var(--green);outline-offset:3px}
+
+#withdrawalForm textarea{width:100%;padding:12px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:16px;resize:vertical}.withdrawal-comment{white-space:pre-wrap;overflow-wrap:anywhere}
+
+.drawer-group+.drawer-group{margin-top:24px}.drawer-group>.eyebrow{margin-bottom:10px}
+
+.registration-panel>form{margin-top:16px}.registration-panel{width:100%}.registration-panel>summary{min-height:24px}

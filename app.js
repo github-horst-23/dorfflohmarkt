@@ -65,6 +65,7 @@ adminManualForm.classList.add('admin-manual-form');
 adminManualForm.querySelectorAll('[required]').forEach(field=>field.required=false);
 adminManualForm.querySelectorAll('.required-note').forEach(note=>note.remove());
 adminManualForm.querySelector('[name="address"]').required=true;
+adminManualForm.querySelector('[name="consent"]').required=true;
 const manualAddressNote=document.createElement('small');
 manualAddressNote.className='required-note';manualAddressNote.textContent='Pflichtfeld';
 adminManualForm.querySelector('[name="address"]').closest('label').querySelector('.field-label').append(' ',manualAddressNote);
@@ -651,6 +652,7 @@ $('#lateTokenForm').addEventListener('submit',async event=>{
     if(error){message.textContent='Der Anmeldecode konnte gerade nicht geprüft werden. Bitte erneut versuchen.';return}
     if(data!==true){message.textContent='Der Anmeldecode ist ungültig oder wurde bereits verwendet.';return}
     lateRegistrationToken=token;message.textContent='';renderRegistrationAvailability();
+    $('#registrationPanel').open=true;
     $('#registrationForm').querySelector('input').focus();
   }catch{message.textContent='Der Anmeldecode konnte gerade nicht geprüft werden. Bitte erneut versuchen.'}
   finally{lateTokenChecking=false;button.disabled=false}
@@ -807,7 +809,7 @@ async function loadApplications(){
   const pendingCount=count??data.length;
   setPendingApplicationCount(pendingCount);
   adminStatus(adminMessage,`${pendingCount} offene ${pendingCount===1?'Anmeldung':'Anmeldungen'}`);
-  adminApplications.innerHTML=data.map(r=>`<article class="admin-application"><div class="admin-toolbar"><div><h3>${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)}</h3><p>${escapeHtml(r.address)}, 67373 Dudenhofen · <a href="mailto:${encodeURIComponent(r.email)}">${escapeHtml(r.email)}</a></p></div><span class="admin-pending">Offen</span></div><div class="tag-row">${(r.categories||[]).map(c=>`<span class="tag">${escapeHtml(c)}</span>`).join('')}</div>${r.description?`<p>${escapeHtml(r.description)}</p>`:''}${r.food_available==='Ja'?`<p><strong>Verpflegung:</strong> ${escapeHtml(r.food_description||'Ja')}</p>`:''}<div class="admin-actions"><button class="primary-button" data-approve="${escapeHtml(r.id)}">Freigeben</button><button class="secondary-button" data-reject="${escapeHtml(r.id)}">Ablehnen</button></div></article>`).join('')||'<p class="empty-inline">Keine offenen Anmeldungen.</p>';
+  adminApplications.innerHTML=data.map(r=>`<article class="admin-application"><div class="admin-toolbar"><div><h3>${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)}</h3><p>${escapeHtml(localStandAddress(r.address))} · <a href="mailto:${encodeURIComponent(r.email)}">${escapeHtml(r.email)}</a></p></div><span class="admin-pending">Offen</span></div><div class="tag-row">${(r.categories||[]).map(c=>`<span class="tag">${escapeHtml(c)}</span>`).join('')}</div>${r.description?`<p>${escapeHtml(r.description)}</p>`:''}${r.food_available==='Ja'?`<p><strong>Verpflegung:</strong> ${escapeHtml(r.food_description||'Ja')}</p>`:''}<div class="admin-actions"><button class="primary-button" data-approve="${escapeHtml(r.id)}">Freigeben</button><button class="secondary-button" data-reject="${escapeHtml(r.id)}">Ablehnen</button></div></article>`).join('')||'<p class="empty-inline">Keine offenen Anmeldungen.</p>';
   $$('[data-approve]').forEach(button=>button.addEventListener('click',()=>moderateRegistration(button.dataset.approve,'approve')));
   $$('[data-reject]').forEach(button=>button.addEventListener('click',()=>moderateRegistration(button.dataset.reject,'reject')));
 }
@@ -880,7 +882,7 @@ $('#refreshStands').addEventListener('click',async event=>{
     const loaded=await loadPublishedStands({retryGeocoding:true});
     if(loaded===false){toast(navigator.onLine===false?'Du bist offline. Vorhandene Standdaten bleiben sichtbar; bei Netzrückkehr wird automatisch aktualisiert.':'Standdaten sind gerade nicht erreichbar. Vorhandene Daten bleiben sichtbar; die App versucht es automatisch erneut.');return}
     const tasks=[refreshPendingApplicationCount(),loadEventSettings()];
-    if(!adminDashboard.hidden)tasks.push(loadApplications());
+    if(!adminDashboard.hidden)tasks.push(loadApplications(),loadWithdrawalRequests());
     const additional=await Promise.allSettled(tasks);
     toast(loaded===null?'Standdaten werden bereits aktualisiert.':additional.some(result=>result.status==='rejected')?'Standdaten aktualisiert. Zusätzliche Informationen konnten noch nicht vollständig geladen werden.':'Standdaten aktualisiert.');
   }catch{toast('Standdaten konnten nicht geladen werden. Bitte erneut versuchen.')}
@@ -897,30 +899,79 @@ function downloadPrivateFile(content,type,name){
 function downloadRegistrationPdf(application,receipt){
   const ascii=value=>String(value).replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/Ä/g,'Ae').replace(/Ö/g,'Oe').replace(/Ü/g,'Ue').replace(/ß/g,'ss').replace(/[^\x20-\x7e]/g,'?');
   const labels={first_name:'Vorname',last_name:'Nachname',email:'E-Mail',address:'Standort',categories:'Angebote',food_available:'Verpflegung',food_description:'Verpflegungsangebot',description:'Beschreibung'};
-  const lines=['Dorfflohmarkt - Anmeldebestaetigung','Status: Zur Pruefung eingereicht',...Object.entries(application).filter(([key])=>!['late_registration_token','status'].includes(key)).map(([k,v])=>`${labels[k]||k}: ${Array.isArray(v)?v.join(', '):v}`),'Anmeldenummer: '+receipt.registration_id,'Persoenliche Abmeldephrase: '+receipt.keyphrase,'Sicher aufbewahren. Nicht oeffentlich weitergeben.','Abmeldung in der App unter Anmeldung anfragen.','Kontakt: flohmarkt@dudenhofen.org'].flatMap(line=>ascii(line).match(/.{1,85}(?:\s|$)|.{1,85}/g)||['']);
+  const lines=['Dorfflohmarkt - Anmeldebestaetigung','Status: Zur Pruefung eingereicht',...Object.entries(application).filter(([key])=>!['late_registration_token','status'].includes(key)).map(([k,v])=>`${labels[k]||k}: ${Array.isArray(v)?v.join(', '):v}`),'Sicher aufbewahren. Nicht oeffentlich weitergeben.','Abmeldung in der App unter Anmeldung anfragen.','Kontakt: flohmarkt@dudenhofen.org'].flatMap(line=>ascii(line).match(/.{1,85}(?:\s|$)|.{1,85}/g)||['']);
   const pages=[];for(let i=0;i<lines.length;i+=43)pages.push(lines.slice(i,i+43));
-  const objects=['','<< /Type /Catalog /Pages 2 0 R >>','', '<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>'];
+  const objects=['','<< /Type /Catalog /Pages 2 0 R >>','', '<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>','<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold >>'];
   const kids=[];
+  const pdfText=value=>ascii(value).replace(/[\\()]/g,'\\$&');
+  const heading=(value,x,y,size=12,font='F2')=>`BT /${font} ${size} Tf ${x} ${y} Td (${pdfText(value)}) Tj ET`;
+  const phraseWords=String(receipt.keyphrase).trim().split(/\s+/);
+  const credentialStream=[
+    '0.09 0.20 0.37 rg',heading('Deine Anmeldebestaetigung',42,785,22),
+    heading('Wichtig fuer eine spaetere Abmeldung',42,750,12,'F1'),
+    '0.92 0.95 0.99 rg 42 622 511 96 re f',
+    '0.09 0.20 0.37 rg',heading('ANMELDENUMMER',58,692,12),heading(receipt.registration_id,58,656,14),
+    '0.92 0.95 0.99 rg 42 436 511 160 re f',
+    '0.09 0.20 0.37 rg',heading('PERSOENLICHE ABMELDEPHRASE',58,570,12),
+    ...phraseWords.map((word,i)=>heading(word,58,535-i*26,Math.min(13,Math.floor(470/(Math.max(1,word.length)*0.6))))),
+    heading('Die beiden Woerter gehoeren zusammen.',58,454,10,'F1'),
+    heading('Bitte sicher aufbewahren und nicht weitergeben.',42,395,12),
+    heading('Unter Anmeldung > Meinen Stand abmelden brauchst du',42,366,11,'F1'),
+    heading('die Anmeldenummer und beide Woerter der Abmeldephrase.',42,348,11,'F1'),
+    heading('Deine Anmeldedaten folgen auf der naechsten Seite.',42,310,11,'F1'),
+    heading('Die Anmeldung ist noch nicht freigegeben.',42,290,11,'F1'),
+    heading('Kontakt: flohmarkt@dudenhofen.org',42,255,11,'F1')
+  ].join('\n');
+  const addPage=stream=>{const id=objects.length;kids.push(`${id} 0 R`);objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${id+1} 0 R >>`,`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`)};
+  addPage(credentialStream);
   for(const page of pages){const id=objects.length;const stream='BT /F1 10 Tf 42 800 Td 16 TL '+page.map((line,i)=>(i?'T* ':'')+'('+line.replace(/[\\()]/g,'\\$&')+') Tj').join('\n')+' ET';kids.push(`${id} 0 R`);objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents ${id+1} 0 R >>`,`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`)}
-  objects[2]=`<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${pages.length} >>`;
+  objects[2]=`<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${kids.length} >>`;
   let pdf='%PDF-1.4\n',offsets=[0];for(let i=1;i<objects.length;i++){offsets.push(pdf.length);pdf+=`${i} 0 obj\n${objects[i]}\nendobj\n`}
   const start=pdf.length;pdf+=`xref\n0 ${objects.length}\n0000000000 65535 f \n`+offsets.slice(1).map(offset=>String(offset).padStart(10,'0')+' 00000 n \n').join('')+`trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${start}\n%%EOF`;
   downloadPrivateFile(pdf,'application/pdf','Dorfflohmarkt-Anmeldebestaetigung.pdf');
 }
 const withdrawalPanel=document.createElement('details');withdrawalPanel.className='admin-manual-entry';
-withdrawalPanel.innerHTML='<summary>Meinen Stand abmelden</summary><p>Dein Stand bleibt sichtbar, bis das Organisationsteam die Abmeldung bestätigt hat. Für ältere Anmeldungen ohne Abmeldephrase oder zur Löschung personenbezogener Daten schreibe an <a href="mailto:flohmarkt@dudenhofen.org">flohmarkt@dudenhofen.org</a>.</p><form id="withdrawalForm"><label>Anmeldenummer<input name="registrationId" required autocomplete="off"></label><label>Persönliche Abmeldephrase (zwei Wörter)<input name="phrase" required autocomplete="off" spellcheck="false"></label><button class="secondary-button" type="submit">Abmeldung anfragen</button><p role="status"></p></form>';
+withdrawalPanel.innerHTML='<summary>Meinen Stand abmelden</summary><p>Dein Stand bleibt sichtbar, bis das Organisationsteam die Abmeldung bestätigt hat. Für ältere Anmeldungen ohne Abmeldephrase oder zur Löschung personenbezogener Daten schreibe an <a href="mailto:flohmarkt@dudenhofen.org">flohmarkt@dudenhofen.org</a>.</p><form id="withdrawalForm"><label>Anmeldenummer<input name="registrationId" required autocomplete="off"></label><label>Persönliche Abmeldephrase (zwei Wörter)<input name="phrase" required autocomplete="off" spellcheck="false"></label><label>Kommentar (optional)<textarea name="comment" maxlength="1000" rows="3" placeholder="Möchtest du dem Organisationsteam etwas mitteilen?"></textarea></label><button class="secondary-button" type="submit">Abmeldung abschicken</button><p role="status"></p></form>';
 $('#page-anmeldung .form-shell').append(withdrawalPanel);
 $('#withdrawalForm').addEventListener('submit',async event=>{
-  event.preventDefault();const form=event.currentTarget,button=form.querySelector('button'),message=form.querySelector('[role="status"]');button.disabled=true;
-  try{const data=new FormData(form);const {data:accepted,error}=await supabaseClient.rpc('request_withdrawal',{p_id:data.get('registrationId').trim(),p_phrase:data.get('phrase').trim()});
-    message.textContent=!error&&accepted?'Deine Abmeldung wurde zur Prüfung übermittelt. Der Stand wird nach Bestätigung entfernt.':'Die Angaben konnten nicht bestätigt werden. Prüfe deine Bestätigung oder versuche es später erneut. Kontakt: flohmarkt@dudenhofen.org';
-    if(accepted&&!error)form.reset();
-  }catch{message.textContent='Die Anfrage konnte nicht übermittelt werden. Bitte später erneut versuchen.'}finally{button.disabled=false}
+  event.preventDefault();
+  const form=event.currentTarget,button=form.querySelector('button'),message=form.querySelector('[role="status"]');
+  if(button.disabled||!form.reportValidity())return;
+  if(!supabaseClient){message.textContent='Die Abmeldung ist gerade nicht verfügbar. Kontakt: flohmarkt@dudenhofen.org';return}
+  const data=new FormData(form);
+  const registrationId=String(data.get('registrationId')).trim().replace(/[\s\u200B-\u200D\uFEFF]/g,'');
+  const phrase=String(data.get('phrase')).normalize('NFKC').replace(/[\u200B-\u200D\uFEFF]/g,'').trim().replace(/\s+/g,' ').toLowerCase();
+  const comment=String(data.get('comment')||'').trim();
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(registrationId)){
+    message.textContent='Bitte die vollständige Anmeldenummer aus deiner Bestätigung eingeben.';return;
+  }
+  button.disabled=true;message.textContent='Abmeldung wird übermittelt …';
+  try{
+    let {data:accepted,error}=await supabaseClient.rpc('request_withdrawal',{p_id:registrationId,p_phrase:phrase,p_comment:comment});
+    const missingFunction=issue=>issue?.code==='PGRST202'||issue?.code==='42883';
+    // Older installations support requests without a comment. Never discard a comment.
+    if(missingFunction(error)&&!comment){
+      ({data:accepted,error}=await supabaseClient.rpc('request_withdrawal',{p_id:registrationId,p_phrase:phrase}));
+    }
+    if(error){
+      if(missingFunction(error))message.textContent='Die Abmeldefunktion ist in der Datenbank noch nicht vollständig eingerichtet. Bitte das Organisationsteam unter flohmarkt@dudenhofen.org informieren'+(comment?' (Erweiterung für Kommentare fehlt).':'.');
+      else if(['42501','PGRST301','PGRST302'].includes(error.code))message.textContent='Die Datenbank erlaubt die Abmeldung gerade nicht. Bitte das Organisationsteam unter flohmarkt@dudenhofen.org informieren.';
+      else message.textContent='Die Abmeldung konnte wegen eines Verbindungs- oder Datenbankfehlers nicht übermittelt werden. Deine Eingaben bleiben erhalten. Bitte später erneut versuchen oder flohmarkt@dudenhofen.org kontaktieren.';
+      return;
+    }
+    if(accepted===true){message.textContent='Deine Abmeldung wurde zur Prüfung übermittelt. Der Stand wird nach Bestätigung entfernt.';form.reset()}
+    else message.textContent='Anmeldenummer und Abmeldephrase passen nicht zusammen oder die Prüfung ist vorübergehend gesperrt. Nach mehreren Fehlversuchen bitte 15 Minuten warten. Ältere Anmeldungen ohne Phrase: flohmarkt@dudenhofen.org.';
+  }catch{message.textContent='Die Anfrage konnte nicht übermittelt werden. Bitte Verbindung prüfen und später erneut versuchen.'}
+  finally{button.disabled=false}
 });
+
+let withdrawalRequestSequence=0;
 async function loadWithdrawalRequests(){
+  const sessionVersion=adminSessionVersion,sequence=++withdrawalRequestSequence;
   const host=$('#withdrawalRequests');const {data,error}=await supabaseClient.rpc('admin_withdrawals');
+  if(sessionVersion!==adminSessionVersion||sequence!==withdrawalRequestSequence||adminDashboard.hidden)return;
   if(error){host.textContent='Abmeldungen können nicht geladen werden. Bitte Supabase-Erweiterung prüfen.';return}
-  host.innerHTML=(data||[]).map(request=>`<article class="admin-application"><h3>${escapeHtml(request.address)}</h3><p>${escapeHtml(request.name)}</p><button type="button" data-withdraw-approve="${escapeHtml(request.id)}">Abmeldung bestätigen</button> <button type="button" data-withdraw-reject="${escapeHtml(request.id)}">Ablehnen</button></article>`).join('')||'Keine offenen Abmeldungen.';
+  host.innerHTML=(data||[]).map(request=>`<article class="admin-application"><h3>${escapeHtml(request.address)}</h3><p>${escapeHtml(request.name)}</p>${request.comment?`<p class="withdrawal-comment"><strong>Kommentar:</strong> ${escapeHtml(request.comment)}</p>`:''}<button type="button" data-withdraw-approve="${escapeHtml(request.id)}">Abmeldung bestätigen</button> <button type="button" data-withdraw-reject="${escapeHtml(request.id)}">Ablehnen</button></article>`).join('')||'Keine offenen Abmeldungen.';
   host.querySelectorAll('button').forEach(button=>button.addEventListener('click',async()=>{
     const approve=Boolean(button.dataset.withdrawApprove);if(approve&&!confirm('Abmeldung bestätigen und Stand aus der öffentlichen Ansicht entfernen?'))return;
     button.disabled=true;const {error}=await supabaseClient.rpc('moderate_withdrawal',{p_id:button.dataset.withdrawApprove||button.dataset.withdrawReject,p_approve:approve});
@@ -931,11 +982,14 @@ async function loadWithdrawalRequests(){
 $('#exportStands').addEventListener('click',async event=>{
   const button=event.currentTarget,status=$('#exportStatus');
   if(!confirm('Vertrauliche Namen, E-Mail-Adressen und Standdaten exportieren? Speichere die Datei nur an einem geschützten Ort.'))return;
+  const sessionVersion=adminSessionVersion;
   button.disabled=true;status.textContent='Export wird geladen …';
   try{
-    const {data,error}=await supabaseClient.rpc('admin_export_stands');if(error)throw error;
+    const {data,error}=await supabaseClient.rpc('admin_export_stands');
+    if(sessionVersion!==adminSessionVersion||adminDashboard.hidden)return;
+    if(error)throw error;
     const xml=value=>String(value??'').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    const sheet=(name,rows)=>{const keys=[...new Set(rows.flatMap(row=>Object.keys(row)))];const cell=value=>`<Cell><Data ss:Type="String">${xml(Array.isArray(value)?value.join(', '):value)}</Data></Cell>`;return `<Worksheet ss:Name="${name}"><Table><Row>${keys.map(cell).join('')}</Row>${rows.map(row=>'<Row>'+keys.map(key=>cell(row[key])).join('')+'</Row>').join('')}</Table></Worksheet>`};
+    const sheet=(name,rows)=>{const preferred=name==='Anmeldungen'?['first_name','last_name','address','email']:['address'];const keys=[...preferred,...new Set(rows.flatMap(row=>Object.keys(row)).filter(key=>!preferred.includes(key)))];const headers={first_name:'Vorname',last_name:'Nachname',address:'Adresse',email:'E-Mail'};const cell=value=>`<Cell><Data ss:Type="String">${xml(Array.isArray(value)?value.join(', '):value)}</Data></Cell>`;return `<Worksheet ss:Name="${name}"><Table><Row>${keys.map(key=>cell(headers[key]||key)).join('')}</Row>${rows.map(row=>'<Row>'+keys.map(key=>cell(row[key])).join('')+'</Row>').join('')}</Table></Worksheet>`};
     const workbook='<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'+sheet('Anmeldungen',data.registrations||[])+sheet('Veröffentlichte Stände',data.published||[])+'</Workbook>';
     downloadPrivateFile(workbook,'application/vnd.ms-excel','Dorfflohmarkt-Vertraulich.xls');status.textContent='Export erstellt. Enthält vertrauliche Daten; nicht weiterveröffentlichen.';
   }catch{status.textContent='Export nicht verfügbar. Adminfreigabe und Supabase-Erweiterung prüfen.'}finally{button.disabled=false}
