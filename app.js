@@ -5,6 +5,7 @@ const legacyStandIds={
   'example-beethoven':'943afd79-7ef8-5146-bcfd-7358a2edeba6'
 };
 let stands=[];
+let appActive=null,appActivitySaving=false;
 let manualStandGeocodingAddress=null;
 const geocodingDiagnostics=new Map(),geocodingRetries=new Set();
 let publishedStandListReady=false;
@@ -24,14 +25,14 @@ const standAddressCollator=new Intl.Collator('de',{numeric:true,sensitivity:'bas
 function compareStandAddresses(a,b){return standAddressCollator.compare(streetAddress(a.address),streetAddress(b.address))||standAddressCollator.compare(String(a.id),String(b.id))}
 const geocodingReport=document.createElement('details');
 geocodingReport.className='admin-manual-entry geocoding-report';
-geocodingReport.innerHTML='<summary id="geocodingReportHeading">Geocodierung: Fehlerbericht</summary><p>Veröffentlichte Stände ohne genaue Kartenposition. Laufende und noch ausstehende Suchen sind gesondert gekennzeichnet.</p><p id="geocodingReportSummary" role="status"></p><button class="secondary-button" type="button" data-geocode-all>Alle erneut versuchen</button><p id="geocodingReportMessage" role="status"></p><div id="geocodingReportList"></div>';
+geocodingReport.innerHTML='<summary id="geocodingReportHeading">Geocodierung: Fehlerbericht <span id="geocodingReportCount" class="admin-count-badge" aria-label="Stände ohne Kartenposition">0</span></summary><p>Veröffentlichte Stände ohne genaue Kartenposition. Laufende und noch ausstehende Suchen sind gesondert gekennzeichnet.</p><p id="geocodingReportSummary" role="status"></p><button class="secondary-button" type="button" data-geocode-all>Alle erneut versuchen</button><p id="geocodingReportMessage" role="status"></p><div id="geocodingReportList"></div>';
 $('#adminDashboard .admin-manage-entry').before(geocodingReport);
 function hasStandPosition(stand){return Number.isFinite(stand.lat)&&Number.isFinite(stand.lng)&&Math.abs(stand.lat)<=90&&Math.abs(stand.lng)<=180&&(stand.geocodingSource!=='maps-co'||stand.geocodingExpiresAt>Date.now())}
 function renderGeocodingReport(){
   const host=$('#geocodingReportList');
   if($('#adminDashboard').hidden){host.replaceChildren();return}
   const unresolved=stands.filter(stand=>!hasStandPosition(stand)).sort((a,b)=>streetAddress(a.address).localeCompare(streetAddress(b.address),'de',{numeric:true}));
-  $('#geocodingReportHeading').textContent=`Geocodierung: Fehlerbericht (${unresolved.length})`;
+  $('#geocodingReportCount').textContent=String(unresolved.length);
   const explanations={LOOKUP_RUNNING:'Suche läuft …',PENDING:'Eine andere Anfrage ermittelt die Position bereits.',ZERO_RESULTS:'Keine passende Adresse gefunden.',INEXACT_RESULT:'Nur eine ungenaue Position gefunden; kein Haus-Pin gesetzt.',OUTSIDE_TOWN:'Ergebnis liegt außerhalb von 67373 Dudenhofen.',OVER_QUERY_LIMIT:'Anfragelimit des Geocodierungsdienstes erreicht.',UNAVAILABLE:'Geocodierungsdienst oder Verbindung derzeit nicht verfügbar.',NOT_CONFIGURED:'Geocodierung ist nicht eingerichtet oder deaktiviert.',REQUEST_DENIED:'Der Geocodierungsdienst hat die Anfrage abgelehnt. Freischaltung oder Dienstkonfiguration prüfen.',NOT_PUBLISHED:'Stand ist für die Positionssuche nicht als veröffentlicht verfügbar.',INVALID_RESULT:'Der Dienst hat keine verwendbare genaue Position geliefert.'};
   $('#geocodingReportSummary').textContent=!publishedStandListReady?'Standdaten werden geladen …':unresolved.length?`${unresolved.length} von ${stands.length} veröffentlichten Ständen ohne genaue Kartenposition.`:'Alle veröffentlichten Stände haben eine Kartenposition.';
   const date=value=>new Date(value).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'});
@@ -242,7 +243,7 @@ $('#planFavoritesRoute').addEventListener('click',async()=>{
   }
 });
 function toast(text){const t=$('#toast');t.textContent=text;t.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.classList.remove('show'),2600)}
-function showPage(name){const page=['karte','anmeldung','favoriten','hinweise','admin'].includes(name)?name:'karte';$$('.page').forEach(p=>p.classList.toggle('active',p.id===`page-${page}`));$$('.nav-link').forEach(a=>a.classList.toggle('active',a.dataset.page===page));closeDrawer();window.scrollTo({top:0,behavior:'smooth'});if(page==='karte'&&townMap)setTimeout(()=>{townMap.invalidateSize({pan:false});applyStartupMapView()},80);if(page==='admin')refreshAdmin();if(page==='anmeldung')loadEventSettings();location.hash=page}
+function showPage(name){const page=['karte','anmeldung','favoriten','hinweise','admin'].includes(name)?name:'karte';$$('.page').forEach(p=>p.classList.toggle('active',p.id===`page-${page}`));$$('.nav-link').forEach(a=>a.classList.toggle('active',a.dataset.page===page));closeDrawer();window.scrollTo({top:0,behavior:'smooth'});if(page==='karte'&&townMap)setTimeout(()=>{townMap.invalidateSize({pan:false});applyStartupMapView()},80);if(page==='admin')refreshAdmin();if(page==='anmeldung')loadEventSettings();location.hash=page;renderAppActivity()}
 const drawer=$('#drawer'),scrim=$('#scrim');function openDrawer(){drawer.classList.add('open');scrim.classList.add('show');drawer.setAttribute('aria-hidden','false');$('#menuButton').setAttribute('aria-expanded','true');refreshPendingApplicationCount()}function closeDrawer(){drawer.classList.remove('open');scrim.classList.remove('show');drawer.setAttribute('aria-hidden','true');$('#menuButton').setAttribute('aria-expanded','false')}
 $('#menuButton').addEventListener('click',openDrawer);$('#closeMenu').addEventListener('click',closeDrawer);scrim.addEventListener('click',closeDrawer);$$('[data-page]').forEach(el=>el.addEventListener('click',e=>{e.preventDefault();showPage(el.dataset.page)}));$$('.brand[href="#karte"],.hero .primary-button').forEach(el=>el.addEventListener('click',e=>{if(el.classList.contains('brand')){e.preventDefault();showPage('karte')}else{e.preventDefault();document.querySelector('#karte-map').scrollIntoView({behavior:'smooth'})}}));
 $('#organizerHomepage').addEventListener('click',event=>{
@@ -300,7 +301,8 @@ $('#registrationForm').addEventListener('submit',async e=>{
   catch{error={message:'unavailable'}}
   finally{form.dataset.submitting='false';submitButton.disabled=false}
   if(error){
-    if(error.message?.includes('late_token_invalid_or_used')){lateRegistrationToken='';renderRegistrationAvailability();$('#lateTokenMessage').textContent='Der Anmeldecode ist ungültig oder wurde bereits verwendet. Bitte einen neuen Anmeldecode beim Ortsverein anfragen.';toast('Der Anmeldecode ist ungültig oder bereits verwendet.')}
+    if(error.message?.includes('app_inactive')){await loadEventSettings();toast('Die App ist derzeit pausiert. Bitte das Organisationsteam kontaktieren.')}
+    else if(error.message?.includes('late_token_invalid_or_used')){lateRegistrationToken='';renderRegistrationAvailability();$('#lateTokenMessage').textContent='Der Anmeldecode ist ungültig oder wurde bereits verwendet. Bitte einen neuen Anmeldecode beim Ortsverein anfragen.';toast('Der Anmeldecode ist ungültig oder bereits verwendet.')}
     else if(error.message?.includes('late_tokens_closed_only')){await loadEventSettings();toast('Die Anmeldung ist wieder geöffnet. Bitte erneut absenden.')}
     else if(error.message?.includes('registrations_closed')){await loadEventSettings();toast('Zurzeit werden Anmeldungen nur mit Anmeldecode angenommen.')}
     else toast('Die Anmeldung konnte nicht gesendet werden. Bitte versuche es später erneut.');
@@ -330,7 +332,7 @@ function syncFoodDetails(form){
 }
 $$('[name="foodAvailable"]').forEach(radio=>radio.addEventListener('change',()=>syncFoodDetails(radio.closest('form'))));
 syncFoodDetails($('#registrationForm'));syncFoodDetails(adminManualForm);
-window.addEventListener('hashchange',()=>{const name=location.hash.slice(1);if(['karte','anmeldung','favoriten','hinweise','admin'].includes(name)){$$('.page').forEach(p=>p.classList.toggle('active',p.id===`page-${name}`));$$('.nav-link').forEach(a=>a.classList.toggle('active',a.dataset.page===name));if(name==='karte'&&townMap)setTimeout(()=>{townMap.invalidateSize({pan:false});applyStartupMapView()},80);if(name==='admin')refreshAdmin();if(name==='anmeldung')loadEventSettings()}});
+window.addEventListener('hashchange',()=>{const name=location.hash.slice(1);if(['karte','anmeldung','favoriten','hinweise','admin'].includes(name)){$$('.page').forEach(p=>p.classList.toggle('active',p.id===`page-${name}`));$$('.nav-link').forEach(a=>a.classList.toggle('active',a.dataset.page===name));if(name==='karte'&&townMap)setTimeout(()=>{townMap.invalidateSize({pan:false});applyStartupMapView()},80);if(name==='admin')refreshAdmin();if(name==='anmeldung')loadEventSettings();renderAppActivity()}});
 if(['#anmeldung','#favoriten','#hinweise','#admin'].includes(location.hash)){const p=location.hash.slice(1);$$('.page').forEach(x=>x.classList.toggle('active',x.id===`page-${p}`))}
 const defaultMapCenter=[49.3186,8.3886],defaultMapZoom=15;
 let townMap=null,mapStartupViewPending=true;
@@ -377,8 +379,8 @@ if(window.L){
     bounds:[[48.897996,6.037773],[51.000893,8.617703]],
     attribution:`&copy; <a href="https://lvermgeo.rlp.de/geodaten-geoshop/open-data" target="_blank" rel="noopener noreferrer">GeoBasis-DE / LVermGeoRP ${new Date().getFullYear()}</a>, <a href="https://www.govdata.de/dl-de/by-2-0" target="_blank" rel="noopener noreferrer">dl-de/by-2-0</a> [Daten bearbeitet]`
   });
-  let currentBasemap='aerial';
-  aerialLayer.addTo(townMap);
+  let currentBasemap='street';
+  streetLayer.addTo(townMap);
   $$('[data-basemap]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.basemap===currentBasemap)));
   applyStartupMapView();
   const basemapStatus=$('#basemapStatus');
@@ -598,6 +600,7 @@ async function loadPublishedStands({retryGeocoding=false,geocodeAddress=null}={}
   renderGeocodingReport();
   saveFavs();
   if(!$('#adminDashboard').hidden)renderAdminPublishedStands(stands);
+  if(appActive===false)return true;
   try{
   const priorityAddress=geocodeAddress||manualStandGeocodingAddress;
   if(priorityAddress){
@@ -690,16 +693,20 @@ $('#copyLateToken').addEventListener('click',async()=>{
   catch{field.focus();field.select();toast('Bitte den markierten Token kopieren.')}
 });
 function applyEventSettings(settings){
+  const previousActive=appActive;
+  appActive=typeof settings?.app_active==='boolean'?settings.app_active:null;
   if(settings?.event_date)setMarketDate(settings.event_date);
   registrationOpen=typeof settings?.registrations_open==='boolean'?settings.registrations_open:null;
   renderRegistrationAvailability();
+  renderAppActivity();
+  if(previousActive===false&&appActive===true)void loadPublishedStands();
 }
 function adminStatus(target,message){target.textContent=message}
 async function loadEventSettings(){
   const sequence=++eventSettingsSequence;
   if(!supabaseClient){applyEventSettings(null);return}
   try{
-    const {data,error}=await supabaseClient.from('event_settings').select('event_date,registrations_open').eq('id',true).maybeSingle();
+    const {data,error}=await supabaseClient.from('event_settings').select('event_date,registrations_open,app_active').eq('id',true).maybeSingle();
     if(sequence!==eventSettingsSequence)return;
     if(error||!data){applyEventSettings(null);return}
     applyEventSettings(data);
@@ -725,7 +732,7 @@ registrationToggle.addEventListener('click',async()=>{
   const next=!registrationOpen;
   registrationSaving=true;renderRegistrationAvailability();
   try{
-    const {data,error}=await supabaseClient.from('event_settings').update({registrations_open:next}).eq('id',true).select('event_date,registrations_open').maybeSingle();
+    const {data,error}=await supabaseClient.from('event_settings').update({registrations_open:next}).eq('id',true).select('event_date,registrations_open,app_active').maybeSingle();
     if(error||!data)throw new Error('Save failed');
     eventSettingsSequence++;applyEventSettings(data);
     eventSettingsBroadcast?.postMessage({changed:true});
@@ -794,11 +801,11 @@ adminManualForm.addEventListener('submit',async event=>{
 async function refreshAdmin(){
   if(!supabaseClient){adminStatus(adminLoginMessage,'Supabase ist noch nicht eingerichtet.');return}
   const {data:{session}}=await supabaseClient.auth.getSession();
-  if(adminSessionId!==(session?.user.id||null)){adminSessionId=session?.user.id||null;adminSessionVersion++;pendingCountSequence++;$('#generatedLateToken').value='';$('#lateTokenOutput').hidden=true;}
+  if(adminSessionId!==(session?.user.id||null)){adminSessionId=session?.user.id||null;adminSessionVersion++;pendingCountSequence++;$('#generatedLateToken').value='';$('#lateTokenOutput').hidden=true;clearDeleteConfirmation();}
   adminLoginForm.hidden=Boolean(session);adminDashboard.hidden=!session;
   renderGeocodingReport();
   if(session){loadApplications();loadAdminPublishedStands();loadEventSettings();loadWithdrawalRequests()}
-  else{setPendingApplicationCount(null);adminApplications.innerHTML='';$('#withdrawalRequests').textContent='';$('#exportStatus').textContent='';$('#generatedLateToken').value='';$('#lateTokenOutput').hidden=true}
+  else{setPendingApplicationCount(null);adminApplications.innerHTML='';$('#withdrawalRequests').textContent='';$('#withdrawalCount').textContent='–';$('#exportStatus').textContent='';$('#generatedLateToken').value='';$('#lateTokenOutput').hidden=true}
 }
 adminLoginForm.addEventListener('submit',async e=>{
   e.preventDefault();if(!supabaseClient){adminStatus(adminLoginMessage,'Supabase ist noch nicht eingerichtet.');return}
@@ -818,8 +825,8 @@ async function loadApplications(){
   if(error){setPendingApplicationCount(null);adminStatus(adminMessage,'Kein Adminzugriff. Bitte den Benutzer in Supabase als Admin freischalten.');return}
   const pendingCount=count??data.length;
   setPendingApplicationCount(pendingCount);
-  adminStatus(adminMessage,`${pendingCount} offene ${pendingCount===1?'Anmeldung':'Anmeldungen'}`);
-  adminApplications.innerHTML=data.map(r=>`<article class="admin-application"><div class="admin-toolbar"><div><h3>${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)}</h3><p>${escapeHtml(localStandAddress(r.address))} · <a href="mailto:${encodeURIComponent(r.email)}">${escapeHtml(r.email)}</a></p></div><span class="admin-pending">Offen</span></div><div class="tag-row">${(r.categories||[]).map(c=>`<span class="tag">${escapeHtml(c)}</span>`).join('')}</div>${r.description?`<p>${escapeHtml(r.description)}</p>`:''}${r.food_available==='Ja'?`<p><strong>Verpflegung:</strong> ${escapeHtml(r.food_description||'Ja')}</p>`:''}<div class="admin-actions"><button class="primary-button" data-approve="${escapeHtml(r.id)}">Freigeben</button><button class="secondary-button" data-reject="${escapeHtml(r.id)}">Ablehnen</button></div></article>`).join('')||'<p class="empty-inline">Keine offenen Anmeldungen.</p>';
+  adminStatus(adminMessage,'');
+  adminApplications.innerHTML=data.map(r=>`<article class="admin-application"><div class="admin-toolbar"><div><h3>${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)}</h3><p>${escapeHtml(localStandAddress(r.address))} · <a href="mailto:${encodeURIComponent(r.email)}">${escapeHtml(r.email)}</a></p></div><span class="admin-pending">Offen</span></div><div class="tag-row">${(r.categories||[]).map(c=>`<span class="tag">${escapeHtml(c)}</span>`).join('')}</div>${r.description?`<p>${escapeHtml(r.description)}</p>`:''}${r.food_available==='Ja'?`<p><strong>Verpflegung:</strong> ${escapeHtml(r.food_description||'Ja')}</p>`:''}<div class="admin-actions"><button class="primary-button" data-approve="${escapeHtml(r.id)}">Freigeben</button><button class="secondary-button" data-reject="${escapeHtml(r.id)}">Ablehnen</button></div></article>`).join('');
   $$('[data-approve]').forEach(button=>button.addEventListener('click',()=>moderateRegistration(button.dataset.approve,'approve')));
   $$('[data-reject]').forEach(button=>button.addEventListener('click',()=>moderateRegistration(button.dataset.reject,'reject')));
 }
@@ -865,6 +872,7 @@ async function moderateRegistration(id,action){
 
 function setPendingApplicationCount(count){
   const badge=$('#drawerAdminCount');
+  $('#pendingRegistrationsCount').textContent=count===null?'–':String(count);
   badge.hidden=count===null;
   badge.textContent=count??'';
   if(count!==null)badge.setAttribute('aria-label',`${count} offene ${count===1?'Anmeldung':'Anmeldungen'}`);
@@ -883,7 +891,7 @@ async function refreshPendingApplicationCount(){
     setPendingApplicationCount(error?null:count);
   }catch{if(sequence===pendingCountSequence)setPendingApplicationCount(null)}
 }
-setInterval(()=>{if(document.visibilityState==='visible')refreshPendingApplicationCount()},60000);
+setInterval(()=>{if(document.visibilityState==='visible'){refreshPendingApplicationCount();if(!adminDashboard.hidden)loadWithdrawalRequests()}},60000);
 $('#refreshStands').addEventListener('click',async event=>{
   const button=event.currentTarget;
   if(button.disabled)return;
@@ -941,7 +949,7 @@ function downloadRegistrationPdf(application,receipt){
   downloadPrivateFile(pdf,'application/pdf','Dorfflohmarkt-Anmeldebestaetigung.pdf');
 }
 const withdrawalPanel=document.createElement('details');withdrawalPanel.className='admin-manual-entry';
-withdrawalPanel.innerHTML='<summary>Meinen Stand abmelden</summary><p>Dein Stand bleibt sichtbar, bis das Organisationsteam die Abmeldung bestätigt hat. Für ältere Anmeldungen ohne Abmeldephrase oder zur Löschung personenbezogener Daten schreibe an <a href="mailto:flohmarkt@dudenhofen.org">flohmarkt@dudenhofen.org</a>.</p><form id="withdrawalForm"><label>Anmeldenummer<input name="registrationId" required autocomplete="off"></label><label>Persönliche Abmeldephrase (zwei Wörter)<input name="phrase" required autocomplete="off" spellcheck="false"></label><label>Kommentar (optional)<textarea name="comment" maxlength="1000" rows="3" placeholder="Möchtest du dem Organisationsteam etwas mitteilen?"></textarea></label><button class="secondary-button" type="submit">Abmeldung abschicken</button><p role="status"></p></form>';
+withdrawalPanel.innerHTML='<summary>Meinen Stand abmelden</summary><p>Dein Stand bleibt sichtbar, bis das Organisationsteam die Abmeldung bestätigt hat. Für ältere Anmeldungen ohne Abmeldephrase oder zur Löschung personenbezogener Daten schreibe an <a href="mailto:flohmarkt@dudenhofen.org">flohmarkt@dudenhofen.org</a>.</p><form id="withdrawalForm"><label>Anmeldenummer<input name="registrationId" required autocomplete="off"></label><label>Persönliche Abmeldephrase (zwei Wörter)<input name="phrase" required autocomplete="off" spellcheck="false"></label><label>Kommentar (optional)<textarea name="comment" maxlength="1000" rows="3" placeholder="Möchtest du dem Organisationsteam etwas mitteilen?"></textarea></label><button class="primary-button" type="submit">Abmeldung abschicken</button><p role="status"></p></form>';
 $('#page-anmeldung .form-shell').append(withdrawalPanel);
 $('#withdrawalForm').addEventListener('submit',async event=>{
   event.preventDefault();
@@ -964,7 +972,8 @@ $('#withdrawalForm').addEventListener('submit',async event=>{
       ({data:accepted,error}=await supabaseClient.rpc('request_withdrawal',{p_id:registrationId,p_phrase:phrase}));
     }
     if(error){
-      if(missingFunction(error))message.textContent='Die Abmeldefunktion ist in der Datenbank noch nicht vollständig eingerichtet. Bitte das Organisationsteam unter flohmarkt@dudenhofen.org informieren'+(comment?' (Erweiterung für Kommentare fehlt).':'.');
+      if(error.message?.includes('app_inactive')){message.textContent='Die App ist derzeit pausiert. Kontakt: flohmarkt@dudenhofen.org';void loadEventSettings()}
+      else if(missingFunction(error))message.textContent='Die Abmeldefunktion ist in der Datenbank noch nicht vollständig eingerichtet. Bitte das Organisationsteam unter flohmarkt@dudenhofen.org informieren'+(comment?' (Erweiterung für Kommentare fehlt).':'.');
       else if(['42501','PGRST301','PGRST302'].includes(error.code))message.textContent='Die Datenbank erlaubt die Abmeldung gerade nicht. Bitte das Organisationsteam unter flohmarkt@dudenhofen.org informieren.';
       else message.textContent='Die Abmeldung konnte wegen eines Verbindungs- oder Datenbankfehlers nicht übermittelt werden. Deine Eingaben bleiben erhalten. Bitte später erneut versuchen oder flohmarkt@dudenhofen.org kontaktieren.';
       return;
@@ -980,7 +989,8 @@ async function loadWithdrawalRequests(){
   const sessionVersion=adminSessionVersion,sequence=++withdrawalRequestSequence;
   const host=$('#withdrawalRequests');const {data,error}=await supabaseClient.rpc('admin_withdrawals');
   if(sessionVersion!==adminSessionVersion||sequence!==withdrawalRequestSequence||adminDashboard.hidden)return;
-  if(error){host.textContent='Abmeldungen können nicht geladen werden. Bitte Supabase-Erweiterung prüfen.';return}
+  if(error){$('#withdrawalCount').textContent='–';host.textContent='Abmeldungen können nicht geladen werden. Bitte Supabase-Erweiterung prüfen.';return}
+  $('#withdrawalCount').textContent=String((data||[]).length);
   host.innerHTML=(data||[]).map(request=>`<article class="admin-application"><h3>${escapeHtml(request.address)}</h3><p>${escapeHtml(request.name)}</p>${request.comment?`<p class="withdrawal-comment"><strong>Kommentar:</strong> ${escapeHtml(request.comment)}</p>`:''}<button type="button" data-withdraw-approve="${escapeHtml(request.id)}">Abmeldung bestätigen</button> <button type="button" data-withdraw-reject="${escapeHtml(request.id)}">Ablehnen</button></article>`).join('')||'Keine offenen Abmeldungen.';
   host.querySelectorAll('button').forEach(button=>button.addEventListener('click',async()=>{
     const approve=Boolean(button.dataset.withdrawApprove);if(approve&&!confirm('Abmeldung bestätigen und Stand aus der öffentlichen Ansicht entfernen?'))return;
@@ -1003,4 +1013,71 @@ $('#exportStands').addEventListener('click',async event=>{
     const workbook='<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'+sheet('Anmeldungen',data.registrations||[])+sheet('Veröffentlichte Stände',data.published||[])+'</Workbook>';
     downloadPrivateFile(workbook,'application/vnd.ms-excel','Dorfflohmarkt-Vertraulich.xls');status.textContent='Export erstellt. Enthält vertrauliche Daten; nicht weiterveröffentlichen.';
   }catch{status.textContent='Export nicht verfügbar. Adminfreigabe und Supabase-Erweiterung prüfen.'}finally{button.disabled=false}
+});
+
+function renderAppActivity(){
+  const paused=appActive!==true,isAdminPage=location.hash==='#admin';
+  document.body.classList.toggle('app-paused',paused);
+  $('#appUnavailable').hidden=!paused||isAdminPage;
+  $('#appUnavailable h1').textContent=appActive===false?'Der Dorfflohmarkt ist derzeit nicht aktiv':'App-Status derzeit nicht verfügbar';
+  const toggle=$('#appActivityToggle');toggle.disabled=appActive===null||appActivitySaving;
+  toggle.setAttribute('aria-checked',String(appActive===true));
+  if(!paused&&townMap)requestAnimationFrame(()=>{townMap.invalidateSize({pan:false});applyStartupMapView()});
+  $('#appActivityStatus').textContent=appActivitySaving?'App-Status wird gespeichert …':appActive===true?'Die öffentlichen App-Funktionen sind aktiv.':appActive===false?'Die öffentlichen App-Funktionen sind pausiert. Der Adminbereich bleibt verfügbar.':'App-Status nicht verfügbar. Verbindung und Supabase-Erweiterung prüfen.';
+}
+$('#appActivityToggle').addEventListener('click',async()=>{
+  if(appActivitySaving||appActive===null)return;
+  const next=!appActive;
+  if(!next&&!confirm('App für alle Besucher und Verkäufer pausieren? Daten und Adminzugang bleiben erhalten.'))return;
+  appActivitySaving=true;renderAppActivity();
+  try{
+    const {data,error}=await supabaseClient.rpc('set_app_active',{p_active:next});
+    if(error||typeof data!=='boolean')throw new Error('save_failed');
+    appActive=data;eventSettingsBroadcast?.postMessage({changed:true});
+    await loadEventSettings();if(next)await loadPublishedStands();toast(next?'App ist wieder aktiv.':'App ist jetzt pausiert.');
+  }catch{toast('App-Status konnte nicht gespeichert werden. Adminrechte und Datenbankerweiterung prüfen.')}
+  finally{appActivitySaving=false;renderAppActivity()}
+});
+let deleteChallenge=null,deleteAllBusy=false;
+function clearDeleteConfirmation(){
+  deleteChallenge=null;
+  const form=$('#deleteAllConfirmation');if(form){form.hidden=true;form.reset()}
+  const preview=$('#deleteAllPreview');if(preview)preview.textContent='';
+}
+$('#cancelDeleteAll').addEventListener('click',()=>{clearDeleteConfirmation();$('#deleteAllStatus').textContent='Löschung abgebrochen.'});
+$('#prepareDeleteAll').addEventListener('click',async()=>{
+  if(deleteAllBusy)return;
+  clearDeleteConfirmation();
+  if(!confirm('Sicherheitsabfrage 1 von 2: Alle Stand- und Anmeldedaten endgültig löschen? Zuerst wird eine Vorschau geladen. Es wurde noch nichts gelöscht.'))return;
+  const version=adminSessionVersion,button=$('#prepareDeleteAll'),status=$('#deleteAllStatus');
+  deleteAllBusy=true;button.disabled=true;status.textContent='Löschvorschau wird geladen …';
+  try{
+    const {data,error}=await supabaseClient.rpc('prepare_delete_all_stand_data');
+    if(version!==adminSessionVersion||adminDashboard.hidden)return;
+    if(error||!data?.challenge||!data?.counts)throw new Error('prepare_failed');
+    deleteChallenge={token:data.challenge,version};
+    const c=data.counts;
+    $('#deleteAllPreview').textContent=`Sicherheitsabfrage 2 von 2: ${c.published} veröffentlichte Stände, ${c.registrations} interne Anmeldungen, ${c.withdrawals} Abmeldungen, ${c.secrets} Abmeldephrasen, ${c.tokens} Anmeldecodes und ${c.positions} Standpositionen werden endgültig gelöscht. Bestätigung gilt höchstens fünf Minuten.`;
+    $('#deleteAllConfirmation').hidden=false;$('#deleteAllConfirmation input').focus();status.textContent='Noch nichts gelöscht. Prüfe die Vorschau und bestätige die Texteingabe.';
+  }catch{status.textContent='Löschvorschau nicht verfügbar. Adminrechte und Supabase-Erweiterung prüfen.'}
+  finally{deleteAllBusy=false;button.disabled=false}
+});
+$('#deleteAllConfirmation').addEventListener('submit',async event=>{
+  event.preventDefault();if(deleteAllBusy||!deleteChallenge)return;
+  const form=event.currentTarget,phrase=new FormData(form).get('confirmation');
+  if(phrase!=='ALLE STANDDATEN LÖSCHEN'){$('#deleteAllStatus').textContent='Bitte den Bestätigungstext exakt eingeben.';return}
+  if(deleteChallenge.version!==adminSessionVersion){clearDeleteConfirmation();return}
+  deleteAllBusy=true;form.querySelectorAll('button,input').forEach(el=>el.disabled=true);
+  try{
+    const {error}=await supabaseClient.rpc('delete_all_stand_data',{p_challenge:deleteChallenge.token,p_confirmation:phrase});
+    if(error){
+      $('#deleteAllStatus').textContent=error.message?.includes('data_changed_repeat_confirmation')?'Daten haben sich geändert. Bitte die Löschung mit neuer Vorschau erneut vorbereiten.':'Löschung nicht bestätigt. Bitte Verbindung und Rechte prüfen; vor einem erneuten Versuch aktuelle Daten laden.';
+      clearDeleteConfirmation();return;
+    }
+    clearDeleteConfirmation();favorites=[];lateRegistrationToken='';renderRegistrationAvailability();saveFavs();geocodingDiagnostics.clear();
+    $('#generatedLateToken').value='';$('#lateTokenOutput').hidden=true;
+    $('#deleteAllStatus').textContent='Alle Stand- und Anmeldedaten wurden gelöscht. Adminzugänge und App-Einstellungen bleiben erhalten.';
+    await Promise.allSettled([loadPublishedStands(),loadApplications(),loadWithdrawalRequests(),loadAdminPublishedStands()]);
+  }catch{clearDeleteConfirmation();$('#deleteAllStatus').textContent='Ergebnis unklar. Bitte Standdaten aktualisieren, bevor du erneut löschst.'}
+  finally{deleteAllBusy=false;form.querySelectorAll('button,input').forEach(el=>el.disabled=false)}
 });

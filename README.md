@@ -42,7 +42,7 @@ Unter **Admin → Nachzügler-Tokens** werden bei geschlossener Anmeldung einmal
 
 Der Überblick unter der Karte zeigt Stände, Verpflegung, Favoriten und die häufigsten Warengruppen für die aktuelle Suche und Filterauswahl.
 
-Ersetze die geänderten App-Dateien im selben Repository und veröffentliche den Commit. Bei Änderungen an App-Dateien erhöhe die Versionsnummer von `CACHE_NAME` in `sw.js`, damit bereits installierte Apps den neuen Stand übernehmen. Dieses Paket verwendet Version `dorfflohmarkt-v71`.
+Ersetze die geänderten App-Dateien im selben Repository und veröffentliche den Commit. Bei Änderungen an App-Dateien erhöhe die Versionsnummer von `CACHE_NAME` in `sw.js`, damit bereits installierte Apps den neuen Stand übernehmen. Dieses Paket verwendet Version `dorfflohmarkt-v72`.
 
 
 Lade beim Aktualisieren sämtliche entpackten ZIP-Dateien in dasselbe Stammverzeichnis hoch, einschließlich `routing-client.js` und der versteckten Datei `.nojekyll`. Unter **Settings → Pages** bleibt die Quelle **Deploy from a branch**, Branch **main**, Ordner **/ (root)**. Das ZIP selbst ist kein Pages-Artefakt zum direkten Veröffentlichen.
@@ -50,3 +50,10 @@ Lade beim Aktualisieren sämtliche entpackten ZIP-Dateien in dasselbe Stammverze
 Neue App-Versionen werden nach vollständigem Laden mit einem Hinweis angeboten: **Jetzt aktualisieren** aktiviert die Version und lädt die Seite neu, **Später** verschiebt dies. Die bisherige Version bleibt bis dahin aktiv. Standdaten werden unabhängig davon beim Start und bei Netzrückkehr automatisch aus Supabase geladen. Der Hinweis funktioniert auf der veröffentlichten HTTPS-Seite mit Service Worker, nicht bei `file://`. `app.js?update-notice=1` und `style.css?update-notice=1` in der HTML-Datei ermöglichen den Übergang von älteren App-Caches; im ZIP liegen die Dateien wie gewohnt ohne Fragezeichen im Namen. Bei älteren App-Versionen ohne diesen Hinweis kann einmaliges Schließen aller App-Fenster und erneutes Öffnen nötig sein.
 
 Nach „Später“ bleibt bei verfügbarem Update im Hamburgermenü **App aktualisieren** mit einem gelben Punkt sichtbar. Dieser Eintrag öffnet den Update-Hinweis erneut; erst „Jetzt aktualisieren“ lädt neu.
+
+
+## Voraussetzungen ab Version 72
+
+Vor Veröffentlichung im bestehenden Supabase-Projekt `supabase-app-administration.sql` aus dem Projektordner nach den bisherigen Anmelde-, Token- und Abmelde-Erweiterungen ausführen. Das Script richtet die Aktiv-/Inaktiv-Steuerung und die zweistufige Sammellöschung ein; es führt keine Löschung aus. Danach die aktualisierte Edge Function `geocode-stands` bereitstellen, damit auch Positionsanfragen die Pausierung beachten. Die SQL-Dateien und Backendquellen sind bewusst nicht im öffentlichen ZIP enthalten.
+
+Die Karte beginnt wieder in der Straßenansicht und bleibt beim Start auf Dudenhofen zentriert.

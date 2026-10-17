@@ -414,3 +414,8 @@ h1.page-title{margin:0 0 22px;font:600 clamp(27px,3.4vw,38px)/1.12 Manrope,sans-
 .drawer-group+.drawer-group{margin-top:24px}.drawer-group>.eyebrow{margin-bottom:10px}
 
 .registration-panel>form{margin-top:16px}.registration-panel{width:100%}.registration-panel>summary{min-height:24px}
+.admin-manual-entry>summary .admin-count-badge{display:inline-flex;align-items:center;justify-content:center;min-width:25px;height:25px;padding:0 6px;margin-left:9px;border-radius:50%;background:var(--lime);color:var(--green);font:700 12px/1 'DM Sans',sans-serif;vertical-align:middle}
+.admin-count-badge{white-space:nowrap}.app-unavailable{max-width:760px;margin:40px auto;padding:24px;background:var(--paper);border:1px solid var(--line);border-radius:14px}.app-unavailable[hidden]{display:none}
+.app-paused main>.page:not(#page-admin){display:none!important}.app-paused .drawer-group{display:none}.app-paused .header-actions .install-button{display:none}
+#deleteAllConfirmation{display:grid;gap:14px;margin-top:16px}#deleteAllConfirmation[hidden]{display:none}#deleteAllConfirmation label{display:grid;gap:7px}#deleteAllConfirmation input{width:100%;padding:12px;border:1px solid var(--line);border-radius:7px;font-size:16px}.danger-zone .danger-button{background:#a4262c;color:#fff}.danger-zone .danger-button:hover{background:#7e1d22}
+@media(max-width:560px){.app-unavailable{margin:24px 12px;padding:18px}}
