@@ -242,7 +242,7 @@ $('#planFavoritesRoute').addEventListener('click',async()=>{
   }
 });
 function toast(text){const t=$('#toast');t.textContent=text;t.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.classList.remove('show'),2600)}
-function showPage(name){const page=['karte','anmeldung','favoriten','hinweise','admin'].includes(name)?name:'karte';$$('.page').forEach(p=>p.classList.toggle('active',p.id===`page-${page}`));$$('.nav-link').forEach(a=>a.classList.toggle('active',a.dataset.page===page));closeDrawer();window.scrollTo({top:0,behavior:'smooth'});if(page==='karte'&&townMap)setTimeout(()=>townMap.invalidateSize(),80);if(page==='admin')refreshAdmin();if(page==='anmeldung')loadEventSettings();location.hash=page}
+function showPage(name){const page=['karte','anmeldung','favoriten','hinweise','admin'].includes(name)?name:'karte';$$('.page').forEach(p=>p.classList.toggle('active',p.id===`page-${page}`));$$('.nav-link').forEach(a=>a.classList.toggle('active',a.dataset.page===page));closeDrawer();window.scrollTo({top:0,behavior:'smooth'});if(page==='karte'&&townMap)setTimeout(()=>{townMap.invalidateSize({pan:false});applyStartupMapView()},80);if(page==='admin')refreshAdmin();if(page==='anmeldung')loadEventSettings();location.hash=page}
 const drawer=$('#drawer'),scrim=$('#scrim');function openDrawer(){drawer.classList.add('open');scrim.classList.add('show');drawer.setAttribute('aria-hidden','false');$('#menuButton').setAttribute('aria-expanded','true');refreshPendingApplicationCount()}function closeDrawer(){drawer.classList.remove('open');scrim.classList.remove('show');drawer.setAttribute('aria-hidden','true');$('#menuButton').setAttribute('aria-expanded','false')}
 $('#menuButton').addEventListener('click',openDrawer);$('#closeMenu').addEventListener('click',closeDrawer);scrim.addEventListener('click',closeDrawer);$$('[data-page]').forEach(el=>el.addEventListener('click',e=>{e.preventDefault();showPage(el.dataset.page)}));$$('.brand[href="#karte"],.hero .primary-button').forEach(el=>el.addEventListener('click',e=>{if(el.classList.contains('brand')){e.preventDefault();showPage('karte')}else{e.preventDefault();document.querySelector('#karte-map').scrollIntoView({behavior:'smooth'})}}));
 $('#organizerHomepage').addEventListener('click',event=>{
@@ -330,9 +330,16 @@ function syncFoodDetails(form){
 }
 $$('[name="foodAvailable"]').forEach(radio=>radio.addEventListener('change',()=>syncFoodDetails(radio.closest('form'))));
 syncFoodDetails($('#registrationForm'));syncFoodDetails(adminManualForm);
-window.addEventListener('hashchange',()=>{const name=location.hash.slice(1);if(['karte','anmeldung','favoriten','hinweise','admin'].includes(name)){$$('.page').forEach(p=>p.classList.toggle('active',p.id===`page-${name}`));$$('.nav-link').forEach(a=>a.classList.toggle('active',a.dataset.page===name));if(name==='karte'&&townMap)setTimeout(()=>townMap.invalidateSize(),80);if(name==='admin')refreshAdmin();if(name==='anmeldung')loadEventSettings()}});
+window.addEventListener('hashchange',()=>{const name=location.hash.slice(1);if(['karte','anmeldung','favoriten','hinweise','admin'].includes(name)){$$('.page').forEach(p=>p.classList.toggle('active',p.id===`page-${name}`));$$('.nav-link').forEach(a=>a.classList.toggle('active',a.dataset.page===name));if(name==='karte'&&townMap)setTimeout(()=>{townMap.invalidateSize({pan:false});applyStartupMapView()},80);if(name==='admin')refreshAdmin();if(name==='anmeldung')loadEventSettings()}});
 if(['#anmeldung','#favoriten','#hinweise','#admin'].includes(location.hash)){const p=location.hash.slice(1);$$('.page').forEach(x=>x.classList.toggle('active',x.id===`page-${p}`))}
-let townMap=null;
+const defaultMapCenter=[49.3186,8.3886],defaultMapZoom=15;
+let townMap=null,mapStartupViewPending=true;
+function applyStartupMapView(){
+  if(!townMap||!mapStartupViewPending||!$('#mapCanvas').clientWidth||!$('#mapCanvas').clientHeight)return;
+  townMap.invalidateSize({pan:false});
+  townMap.setView(defaultMapCenter,defaultMapZoom,{animate:false});
+  mapStartupViewPending=false;
+}
 let makeMapPin=null;
 const standPinMarkers=[];
 let geocodingPositionAttribution=false;
@@ -355,22 +362,25 @@ const locateStandAddresses=window.createStandGeocoder({
   }
 });
 if(window.L){
-  townMap=L.map('mapCanvas').setView([49.3186,8.3886],15);
+  townMap=L.map('mapCanvas').setView(defaultMapCenter,defaultMapZoom);
   if('ResizeObserver' in window){
     let mapResizeFrame=0;
     const mapResizeObserver=new ResizeObserver(()=>{
       cancelAnimationFrame(mapResizeFrame);
-      mapResizeFrame=requestAnimationFrame(()=>{if($('#mapCanvas').clientWidth&&$('#mapCanvas').clientHeight)townMap.invalidateSize({pan:false})});
+      mapResizeFrame=requestAnimationFrame(()=>{if($('#mapCanvas').clientWidth&&$('#mapCanvas').clientHeight){townMap.invalidateSize({pan:false});applyStartupMapView()}});
     });
     mapResizeObserver.observe($('#mapCanvas'));
   }
-  const streetLayer=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(townMap);
+  const streetLayer=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'});
   const aerialLayer=L.tileLayer.wms('https://geo4.service24.rlp.de/wms/rp_dop20.fcgi',{
     layers:'rp_dop20',format:'image/png',transparent:false,version:'1.1.1',maxZoom:19,
     bounds:[[48.897996,6.037773],[51.000893,8.617703]],
     attribution:`&copy; <a href="https://lvermgeo.rlp.de/geodaten-geoshop/open-data" target="_blank" rel="noopener noreferrer">GeoBasis-DE / LVermGeoRP ${new Date().getFullYear()}</a>, <a href="https://www.govdata.de/dl-de/by-2-0" target="_blank" rel="noopener noreferrer">dl-de/by-2-0</a> [Daten bearbeitet]`
   });
-  let currentBasemap='street';
+  let currentBasemap='aerial';
+  aerialLayer.addTo(townMap);
+  $$('[data-basemap]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.basemap===currentBasemap)));
+  applyStartupMapView();
   const basemapStatus=$('#basemapStatus');
   $$('[data-basemap]').forEach(button=>{
     button.disabled=false;
