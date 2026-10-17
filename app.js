@@ -30,10 +30,11 @@ $('#adminDashboard .admin-manage-entry').before(geocodingReport);
 function hasStandPosition(stand){return Number.isFinite(stand.lat)&&Number.isFinite(stand.lng)&&Math.abs(stand.lat)<=90&&Math.abs(stand.lng)<=180&&(stand.geocodingSource!=='maps-co'||stand.geocodingExpiresAt>Date.now())}
 function renderGeocodingReport(){
   const host=$('#geocodingReportList');
-  if($('#adminDashboard').hidden){host.replaceChildren();return}
   const unresolved=stands.filter(stand=>!hasStandPosition(stand)).sort((a,b)=>streetAddress(a.address).localeCompare(streetAddress(b.address),'de',{numeric:true}));
   $('#geocodingReportCount').textContent=String(unresolved.length);
-  const explanations={LOOKUP_RUNNING:'Suche läuft …',PENDING:'Eine andere Anfrage ermittelt die Position bereits.',ZERO_RESULTS:'Keine passende Adresse gefunden.',INEXACT_RESULT:'Nur eine ungenaue Position gefunden; kein Haus-Pin gesetzt.',OUTSIDE_TOWN:'Ergebnis liegt außerhalb von 67373 Dudenhofen.',OVER_QUERY_LIMIT:'Anfragelimit des Geocodierungsdienstes erreicht.',UNAVAILABLE:'Geocodierungsdienst oder Verbindung derzeit nicht verfügbar.',NOT_CONFIGURED:'Geocodierung ist nicht eingerichtet oder deaktiviert.',REQUEST_DENIED:'Der Geocodierungsdienst hat die Anfrage abgelehnt. Freischaltung oder Dienstkonfiguration prüfen.',NOT_PUBLISHED:'Stand ist für die Positionssuche nicht als veröffentlicht verfügbar.',INVALID_RESULT:'Der Dienst hat keine verwendbare genaue Position geliefert.'};
+  updateAdminTodoCount();
+  if($('#adminDashboard').hidden){host.replaceChildren();return}
+  const explanations={APP_STATUS_UNAVAILABLE:'Der Server kann den App-Status nicht lesen. Geocodierungsfunktion und Serverberechtigungen prüfen.',APP_INACTIVE:'Die App ist pausiert; die Positionssuche ist deaktiviert.',SERVICE_AUTH_ERROR:'Der Server hat den App-Zugriff abgewiesen. Funktionskonfiguration prüfen.',LOOKUP_RUNNING:'Suche läuft …',PENDING:'Eine andere Anfrage ermittelt die Position bereits.',ZERO_RESULTS:'Keine passende Adresse gefunden.',INEXACT_RESULT:'Nur eine ungenaue Position gefunden; kein Haus-Pin gesetzt.',OUTSIDE_TOWN:'Ergebnis liegt außerhalb von 67373 Dudenhofen.',OVER_QUERY_LIMIT:'Anfragelimit des Geocodierungsdienstes erreicht.',UNAVAILABLE:'Geocodierungsdienst oder Verbindung derzeit nicht verfügbar.',NOT_CONFIGURED:'Geocodierung ist nicht eingerichtet oder deaktiviert.',REQUEST_DENIED:'Der Geocodierungsdienst hat die Anfrage abgelehnt. Freischaltung oder Dienstkonfiguration prüfen.',NOT_PUBLISHED:'Stand ist für die Positionssuche nicht als veröffentlicht verfügbar.',INVALID_RESULT:'Der Dienst hat keine verwendbare genaue Position geliefert.'};
   $('#geocodingReportSummary').textContent=!publishedStandListReady?'Standdaten werden geladen …':unresolved.length?`${unresolved.length} von ${stands.length} veröffentlichten Ständen ohne genaue Kartenposition.`:'Alle veröffentlichten Stände haben eine Kartenposition.';
   const date=value=>new Date(value).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'});
   host.innerHTML=unresolved.map(stand=>{
@@ -805,7 +806,7 @@ async function refreshAdmin(){
   adminLoginForm.hidden=Boolean(session);adminDashboard.hidden=!session;
   renderGeocodingReport();
   if(session){loadApplications();loadAdminPublishedStands();loadEventSettings();loadWithdrawalRequests()}
-  else{setPendingApplicationCount(null);adminApplications.innerHTML='';$('#withdrawalRequests').textContent='';$('#withdrawalCount').textContent='–';$('#exportStatus').textContent='';$('#generatedLateToken').value='';$('#lateTokenOutput').hidden=true}
+  else{setPendingApplicationCount(null);adminApplications.innerHTML='';$('#withdrawalRequests').textContent='';$('#withdrawalCount').textContent='–';updateAdminTodoCount();$('#exportStatus').textContent='';$('#generatedLateToken').value='';$('#lateTokenOutput').hidden=true}
 }
 adminLoginForm.addEventListener('submit',async e=>{
   e.preventDefault();if(!supabaseClient){adminStatus(adminLoginMessage,'Supabase ist noch nicht eingerichtet.');return}
@@ -870,13 +871,18 @@ async function moderateRegistration(id,action){
   await Promise.all([loadApplications(),loadPublishedStands()]);
 }
 
-function setPendingApplicationCount(count){
+function updateAdminTodoCount(){
   const badge=$('#drawerAdminCount');
+  const counts=['#pendingRegistrationsCount','#withdrawalCount','#geocodingReportCount'].map(selector=>$(selector).textContent.trim());
+  const known=counts.every(value=>/^\d+$/.test(value));
+  const total=counts.reduce((sum,value)=>sum+(Number(value)||0),0);
+  badge.hidden=$('#pendingRegistrationsCount').textContent==='–';
+  badge.textContent=known?String(total):'…';
+  badge.setAttribute('aria-label',known?`${total} offene Aufgaben`:'Offene Aufgaben werden geladen');
+}
+function setPendingApplicationCount(count){
   $('#pendingRegistrationsCount').textContent=count===null?'–':String(count);
-  badge.hidden=count===null;
-  badge.textContent=count??'';
-  if(count!==null)badge.setAttribute('aria-label',`${count} offene ${count===1?'Anmeldung':'Anmeldungen'}`);
-  else badge.removeAttribute('aria-label');
+  updateAdminTodoCount();
 }
 let pendingCountSequence=0;
 async function refreshPendingApplicationCount(){
@@ -886,8 +892,13 @@ async function refreshPendingApplicationCount(){
     const {data:{session}}=await supabaseClient.auth.getSession();
     if(sequence!==pendingCountSequence)return;
     if(!session){setPendingApplicationCount(null);return}
-    const {count,error}=await supabaseClient.from('stand_registrations').select('id',{count:'exact',head:true}).eq('status','pending');
-    if(sequence!==pendingCountSequence)return;
+    const sessionVersion=adminSessionVersion;
+    const [{count,error},withdrawals]=await Promise.all([
+      supabaseClient.from('stand_registrations').select('id',{count:'exact',head:true}).eq('status','pending'),
+      supabaseClient.rpc('admin_withdrawals')
+    ]);
+    if(sequence!==pendingCountSequence||sessionVersion!==adminSessionVersion)return;
+    $('#withdrawalCount').textContent=withdrawals.error?'–':String((withdrawals.data||[]).length);
     setPendingApplicationCount(error?null:count);
   }catch{if(sequence===pendingCountSequence)setPendingApplicationCount(null)}
 }
@@ -989,8 +1000,8 @@ async function loadWithdrawalRequests(){
   const sessionVersion=adminSessionVersion,sequence=++withdrawalRequestSequence;
   const host=$('#withdrawalRequests');const {data,error}=await supabaseClient.rpc('admin_withdrawals');
   if(sessionVersion!==adminSessionVersion||sequence!==withdrawalRequestSequence||adminDashboard.hidden)return;
-  if(error){$('#withdrawalCount').textContent='–';host.textContent='Abmeldungen können nicht geladen werden. Bitte Supabase-Erweiterung prüfen.';return}
-  $('#withdrawalCount').textContent=String((data||[]).length);
+  if(error){$('#withdrawalCount').textContent='–';updateAdminTodoCount();host.textContent='Abmeldungen können nicht geladen werden. Bitte Supabase-Erweiterung prüfen.';return}
+  $('#withdrawalCount').textContent=String((data||[]).length);updateAdminTodoCount();
   host.innerHTML=(data||[]).map(request=>`<article class="admin-application"><h3>${escapeHtml(request.address)}</h3><p>${escapeHtml(request.name)}</p>${request.comment?`<p class="withdrawal-comment"><strong>Kommentar:</strong> ${escapeHtml(request.comment)}</p>`:''}<button type="button" data-withdraw-approve="${escapeHtml(request.id)}">Abmeldung bestätigen</button> <button type="button" data-withdraw-reject="${escapeHtml(request.id)}">Ablehnen</button></article>`).join('')||'Keine offenen Abmeldungen.';
   host.querySelectorAll('button').forEach(button=>button.addEventListener('click',async()=>{
     const approve=Boolean(button.dataset.withdrawApprove);if(approve&&!confirm('Abmeldung bestätigen und Stand aus der öffentlichen Ansicht entfernen?'))return;

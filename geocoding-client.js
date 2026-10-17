@@ -29,7 +29,7 @@ window.createStandGeocoder = function ({ client, config, onCoordinates, onStatus
     missing.forEach(stand => inFlight.set(stand.key, completion));
     missing.forEach(stand => report(stand, 'LOOKUP_RUNNING'));
     onStatus('Standpositionen werden ermittelt …');
-    let failed = false;
+    let failed = false, serviceFailure = 'UNAVAILABLE';
     try {
       for (let start = 0; start < missing.length; start += 10) {
         const batch = missing.slice(start, start + 10);
@@ -37,6 +37,11 @@ window.createStandGeocoder = function ({ client, config, onCoordinates, onStatus
           body: { standIds: batch.map(stand => stand.id) },
         });
         if (error || !Array.isArray(data?.coordinates) || !Array.isArray(data?.unresolved)) {
+          let detail = data;
+          try { if (error?.context?.json) detail = await error.context.json(); } catch {}
+          const status = error?.context?.status;
+          serviceFailure = ['APP_STATUS_UNAVAILABLE','APP_INACTIVE'].includes(detail?.code) ? detail.code :
+            [401,403].includes(status) ? 'SERVICE_AUTH_ERROR' : 'UNAVAILABLE';
           unavailableUntil = Date.now() + 5 * 60000;
           failed = true;
           break;
@@ -79,7 +84,7 @@ window.createStandGeocoder = function ({ client, config, onCoordinates, onStatus
     } finally {
       // Include unprocessed batches when the service fails partway through a request.
       if (unavailableUntil > Date.now()) missing.filter(stand => !cache.has(stand.key))
-        .forEach(stand => report(stand, 'UNAVAILABLE', new Date(unavailableUntil).toISOString()));
+        .forEach(stand => report(stand, serviceFailure, new Date(unavailableUntil).toISOString()));
       missing.forEach(stand => pending.delete(stand.key));
       missing.forEach(stand => inFlight.delete(stand.key));
       resolveLookup();
