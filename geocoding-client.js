@@ -1,4 +1,4 @@
-// Transient browser cache only; the shared, expiring cache lives in the Edge Function.
+// Transient browser cache only; the shared, persistent coordinate store lives in the Edge Function.
 window.createStandGeocoder = function ({ client, config, onCoordinates, onStatus, getStands, onDiagnostic = () => {} }) {
   const cache = new Map(), pending = new Set(), retryAfter = new Map(), inFlight = new Map();
   let unavailableUntil = 0, pendingTimer = null;
@@ -54,7 +54,7 @@ window.createStandGeocoder = function ({ client, config, onCoordinates, onStatus
           if (!requested || !Number.isFinite(value.lat) || !Number.isFinite(value.lng) ||
               Math.abs(value.lat) > 90 || Math.abs(value.lng) > 180 || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) continue;
           const saved = { id: value.id, address: requested.address, lat: value.lat, lng: value.lng,
-            expiresAt: Math.min(expiresAt, Date.now() + 30 * 86400000) };
+            expiresAt: expiresAt };
           cache.set(requested.key, saved);
           received.add(value.id);
           report(requested, 'OK');

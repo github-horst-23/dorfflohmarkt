@@ -42,7 +42,7 @@ Unter **Admin → Nachzügler-Tokens** werden bei geschlossener Anmeldung einmal
 
 Der Überblick unter der Karte zeigt Stände, Verpflegung, Favoriten und die häufigsten Warengruppen für die aktuelle Suche und Filterauswahl.
 
-Ersetze die geänderten App-Dateien im selben Repository und veröffentliche den Commit. Bei Änderungen an App-Dateien erhöhe die Versionsnummer von `CACHE_NAME` in `sw.js`, damit bereits installierte Apps den neuen Stand übernehmen. Dieses Paket verwendet Version `dorfflohmarkt-v78`.
+Ersetze die geänderten App-Dateien im selben Repository und veröffentliche den Commit. Bei Änderungen an App-Dateien erhöhe die Versionsnummer von `CACHE_NAME` in `sw.js`, damit bereits installierte Apps den neuen Stand übernehmen. Dieses Paket verwendet Version `dorfflohmarkt-v79`.
 
 
 Lade beim Aktualisieren sämtliche entpackten ZIP-Dateien in dasselbe Stammverzeichnis hoch, einschließlich `routing-client.js` und der versteckten Datei `.nojekyll`. Unter **Settings → Pages** bleibt die Quelle **Deploy from a branch**, Branch **main**, Ordner **/ (root)**. Das ZIP selbst ist kein Pages-Artefakt zum direkten Veröffentlichen.
@@ -65,3 +65,8 @@ Die regelmäßigen Supabase-Abfragen für Einstellungen, Standdaten und Adminzä
 ## Korrektur der Sammellöschung ab Version 76
 
 Bei „DELETE requires a WHERE clause“ einmal supabase-delete-all-where-fix.sql im Supabase SQL Editor ausführen. Es ersetzt nur die Serverfunktion und löscht beim Einspielen keine Daten. Keine Änderung an Edge Functions nötig.
+
+
+## Dauerhafte Koordinaten ab Version 79
+
+Zuerst supabase-permanent-stand-coordinates.sql im Supabase SQL Editor ausführen, dann geocode-stands aktualisieren und das App-Paket veröffentlichen. Erfolgreiche Positionen werden dauerhaft in published_stands gespeichert und passende bestehende Cachepositionen übernommen.
