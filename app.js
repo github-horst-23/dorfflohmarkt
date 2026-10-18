@@ -4,6 +4,7 @@ const legacyStandIds={
   'example-goethe':'0ad76c3b-8c2b-51d2-897b-cb2ae1417d27',
   'example-beethoven':'943afd79-7ef8-5146-bcfd-7358a2edeba6'
 };
+const SUPABASE_REFRESH_INTERVAL=5*60*1000;
 let stands=[];
 let appActive=null,appActivitySaving=false;
 let manualStandGeocodingAddress=null;
@@ -26,7 +27,7 @@ function compareStandAddresses(a,b){return standAddressCollator.compare(streetAd
 const geocodingReport=document.createElement('details');
 geocodingReport.className='admin-manual-entry geocoding-report';
 geocodingReport.innerHTML='<summary id="geocodingReportHeading">Geocodierung: Fehlerbericht <span id="geocodingReportCount" class="admin-count-badge" aria-label="Stände ohne Kartenposition">0</span></summary><p>Veröffentlichte Stände ohne genaue Kartenposition. Laufende und noch ausstehende Suchen sind gesondert gekennzeichnet.</p><p id="geocodingReportSummary" role="status"></p><button class="secondary-button" type="button" data-geocode-all>Alle erneut versuchen</button><p id="geocodingReportMessage" role="status"></p><div id="geocodingReportList"></div>';
-$('#adminDashboard .admin-manage-entry').before(geocodingReport);
+$('#adminDashboard .admin-manage-entry').after(geocodingReport);
 function hasStandPosition(stand){return Number.isFinite(stand.lat)&&Number.isFinite(stand.lng)&&Math.abs(stand.lat)<=90&&Math.abs(stand.lng)<=180&&(stand.geocodingSource!=='maps-co'||stand.geocodingExpiresAt>Date.now())}
 function renderGeocodingReport(){
   const host=$('#geocodingReportList');
@@ -619,7 +620,8 @@ if(supabaseClient){
       if(!standReloadQueued){standReloadQueued=true;standRowsRequest.then(()=>{standReloadQueued=false;loadPublishedStands()})}
     }else loadPublishedStands();
   }).subscribe(status=>{if(status==='SUBSCRIBED')loadPublishedStands()});
-  const refreshIfStale=()=>{if(Date.now()-lastStandRefreshAt>3000)loadPublishedStands()};
+  const refreshIfStale=()=>{if(Date.now()-lastStandRefreshAt>SUPABASE_REFRESH_INTERVAL)loadPublishedStands()};
+  setInterval(()=>{if(document.visibilityState==='visible'&&navigator.onLine!==false)loadPublishedStands()},SUPABASE_REFRESH_INTERVAL);
   window.addEventListener('pageshow',refreshIfStale);
   window.addEventListener('online',loadPublishedStands);
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refreshIfStale()});
@@ -727,7 +729,7 @@ window.addEventListener('online',loadEventSettings);
 window.addEventListener('pageshow',loadEventSettings);
 window.addEventListener('focus',loadEventSettings);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')loadEventSettings()});
-setInterval(()=>{if(document.visibilityState==='visible'&&navigator.onLine)loadEventSettings()},5000);
+setInterval(()=>{if(document.visibilityState==='visible'&&navigator.onLine)loadEventSettings()},SUPABASE_REFRESH_INTERVAL);
 registrationToggle.addEventListener('click',async()=>{
   if(registrationSaving||registrationOpen===null||!supabaseClient)return;
   const next=!registrationOpen;
@@ -818,6 +820,45 @@ adminLoginForm.addEventListener('submit',async e=>{
 });
 $('#adminLogout').addEventListener('click',async()=>{await supabaseClient?.auth.signOut();await refreshAdmin()});
 supabaseClient?.auth.onAuthStateChange(()=>setTimeout(refreshAdmin,0));
+let bulkApprovalBusy=false;
+function updateBulkApprovalButton(){
+  const button=$('#approveAllPending');
+  const count=Number($('#pendingRegistrationsCount').textContent);
+  button.disabled=bulkApprovalBusy||!Number.isFinite(count)||count<1||adminDashboard.hidden;
+  adminApplications.querySelectorAll('button').forEach(button=>button.disabled=bulkApprovalBusy);
+}
+$('#approveAllPending').addEventListener('click',async()=>{
+  if(bulkApprovalBusy||adminDashboard.hidden)return;
+  const version=adminSessionVersion,status=$('#bulkApprovalStatus');
+  bulkApprovalBusy=true;updateBulkApprovalButton();status.textContent='Offene Anmeldungen werden ermittelt …';
+  let approved=0,failed=0,attempted=0;
+  try{
+    const ids=[];
+    for(let start=0;;start+=500){
+      const {data,error}=await supabaseClient.from('stand_registrations').select('id').eq('status','pending').order('id').range(start,start+499);
+      if(version!==adminSessionVersion||adminDashboard.hidden)return;
+      if(error)throw error;
+      ids.push(...data.map(row=>row.id));if(data.length<500)break;
+    }
+    if(!ids.length){status.textContent='Keine offenen Anmeldungen vorhanden.';return}
+    if(!confirm(`${ids.length} offene Anmeldungen jetzt gemeinsam freigeben? Die Standadressen, Angebote und Verpflegung werden öffentlich sichtbar. Namen und E-Mail-Adressen bleiben im Adminbereich.`)){status.textContent='Sammelfreigabe abgebrochen.';return}
+    for(const id of ids){
+      if(version!==adminSessionVersion||adminDashboard.hidden)return;
+      status.textContent=`Freigabe läuft: ${attempted} von ${ids.length} bearbeitet …`;
+      const {error}=await supabaseClient.rpc('approve_stand_registration',{registration_id:id});
+      if(version!==adminSessionVersion||adminDashboard.hidden)return;
+      attempted++;if(error)failed++;else approved++;
+      if(error?.code==='42501')throw error;
+    }
+    status.textContent=`${approved} Anmeldungen freigegeben.${failed?` ${failed} konnten nicht freigegeben werden; bitte die verbleibenden offenen Anmeldungen prüfen.`:''}`;
+  }catch{
+    if(version===adminSessionVersion&&!adminDashboard.hidden)status.textContent=`Sammelfreigabe unterbrochen. ${approved} Anmeldungen wurden freigegeben. Bitte die verbleibenden offenen Anmeldungen prüfen.`;
+  }finally{
+    bulkApprovalBusy=false;
+    if(version===adminSessionVersion&&!adminDashboard.hidden)await Promise.allSettled([loadApplications(),loadPublishedStands(),loadWithdrawalRequests()]);
+    updateBulkApprovalButton();
+  }
+});
 async function loadApplications(){
   const sessionVersion=adminSessionVersion;
   adminStatus(adminMessage,'Anmeldungen werden geladen …');
@@ -828,6 +869,7 @@ async function loadApplications(){
   setPendingApplicationCount(pendingCount);
   adminStatus(adminMessage,'');
   adminApplications.innerHTML=data.map(r=>`<article class="admin-application"><div class="admin-toolbar"><div><h3>${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)}</h3><p>${escapeHtml(localStandAddress(r.address))} · <a href="mailto:${encodeURIComponent(r.email)}">${escapeHtml(r.email)}</a></p></div><span class="admin-pending">Offen</span></div><div class="tag-row">${(r.categories||[]).map(c=>`<span class="tag">${escapeHtml(c)}</span>`).join('')}</div>${r.description?`<p>${escapeHtml(r.description)}</p>`:''}${r.food_available==='Ja'?`<p><strong>Verpflegung:</strong> ${escapeHtml(r.food_description||'Ja')}</p>`:''}<div class="admin-actions"><button class="primary-button" data-approve="${escapeHtml(r.id)}">Freigeben</button><button class="secondary-button" data-reject="${escapeHtml(r.id)}">Ablehnen</button></div></article>`).join('');
+  updateBulkApprovalButton();
   $$('[data-approve]').forEach(button=>button.addEventListener('click',()=>moderateRegistration(button.dataset.approve,'approve')));
   $$('[data-reject]').forEach(button=>button.addEventListener('click',()=>moderateRegistration(button.dataset.reject,'reject')));
 }
@@ -865,6 +907,7 @@ async function deletePublishedStand(id){
   await loadPublishedStands();
 }
 async function moderateRegistration(id,action){
+  if(bulkApprovalBusy)return;
   const {error}=await supabaseClient.rpc(action==='approve'?'approve_stand_registration':'reject_stand_registration',{registration_id:id});
   if(error){adminStatus(adminMessage,'Aktion fehlgeschlagen. Bitte Datenbankeinrichtung und Adminrechte prüfen.');return}
   adminStatus(adminMessage,action==='approve'?'Stand freigegeben und veröffentlicht.':'Anmeldung abgelehnt.');
@@ -883,6 +926,7 @@ function updateAdminTodoCount(){
 function setPendingApplicationCount(count){
   $('#pendingRegistrationsCount').textContent=count===null?'–':String(count);
   updateAdminTodoCount();
+  updateBulkApprovalButton();
 }
 let pendingCountSequence=0;
 async function refreshPendingApplicationCount(){
@@ -902,7 +946,7 @@ async function refreshPendingApplicationCount(){
     setPendingApplicationCount(error?null:count);
   }catch{if(sequence===pendingCountSequence)setPendingApplicationCount(null)}
 }
-setInterval(()=>{if(document.visibilityState==='visible'){refreshPendingApplicationCount();if(!adminDashboard.hidden)loadWithdrawalRequests()}},60000);
+setInterval(()=>{if(document.visibilityState==='visible'){refreshPendingApplicationCount();if(!adminDashboard.hidden)loadWithdrawalRequests()}},SUPABASE_REFRESH_INTERVAL);
 $('#refreshStands').addEventListener('click',async event=>{
   const button=event.currentTarget;
   if(button.disabled)return;
@@ -1049,6 +1093,14 @@ $('#appActivityToggle').addEventListener('click',async()=>{
   }catch{toast('App-Status konnte nicht gespeichert werden. Adminrechte und Datenbankerweiterung prüfen.')}
   finally{appActivitySaving=false;renderAppActivity()}
 });
+function deleteFailureMessage(error){
+  const message=String(error?.message||'');
+  if(message.includes('data_changed_repeat_confirmation'))return 'Daten haben sich geändert. Bitte die Löschung mit neuer Vorschau erneut vorbereiten.';
+  if(message.includes('confirmation_expired'))return 'Die Bestätigung ist abgelaufen. Bitte eine neue Löschvorschau laden.';
+  if(error?.code==='PGRST202'||error?.code==='42883')return 'Die Supabase-Löschfunktion fehlt oder ist veraltet. Bitte die Datenbankerweiterung für die App-Verwaltung aktualisieren.';
+  if(error?.code==='42501'||message.includes('admin_required'))return 'Keine Berechtigung zur Sammellöschung. Bitte erneut als freigeschalteter Admin anmelden.';
+  return `Löschung nicht abgeschlossen. Fehlercode: ${String(error?.code||'VERBINDUNG')}. Bitte aktuelle Daten laden und die Servereinrichtung prüfen.`;
+}
 let deleteChallenge=null,deleteAllBusy=false;
 function clearDeleteConfirmation(){
   deleteChallenge=null;
@@ -1065,12 +1117,13 @@ $('#prepareDeleteAll').addEventListener('click',async()=>{
   try{
     const {data,error}=await supabaseClient.rpc('prepare_delete_all_stand_data');
     if(version!==adminSessionVersion||adminDashboard.hidden)return;
-    if(error||!data?.challenge||!data?.counts)throw new Error('prepare_failed');
+    if(error)throw error;
+    if(!data?.challenge||!data?.counts)throw new Error('invalid_preview');
     deleteChallenge={token:data.challenge,version};
     const c=data.counts;
     $('#deleteAllPreview').textContent=`Sicherheitsabfrage 2 von 2: ${c.published} veröffentlichte Stände, ${c.registrations} interne Anmeldungen, ${c.withdrawals} Abmeldungen, ${c.secrets} Abmeldephrasen, ${c.tokens} Anmeldecodes und ${c.positions} Standpositionen werden endgültig gelöscht. Bestätigung gilt höchstens fünf Minuten.`;
     $('#deleteAllConfirmation').hidden=false;$('#deleteAllConfirmation input').focus();status.textContent='Noch nichts gelöscht. Prüfe die Vorschau und bestätige die Texteingabe.';
-  }catch{status.textContent='Löschvorschau nicht verfügbar. Adminrechte und Supabase-Erweiterung prüfen.'}
+  }catch(error){if(version===adminSessionVersion&&!adminDashboard.hidden)status.textContent=deleteFailureMessage(error)}
   finally{deleteAllBusy=false;button.disabled=false}
 });
 $('#deleteAllConfirmation').addEventListener('submit',async event=>{
@@ -1082,7 +1135,7 @@ $('#deleteAllConfirmation').addEventListener('submit',async event=>{
   try{
     const {error}=await supabaseClient.rpc('delete_all_stand_data',{p_challenge:deleteChallenge.token,p_confirmation:phrase});
     if(error){
-      $('#deleteAllStatus').textContent=error.message?.includes('data_changed_repeat_confirmation')?'Daten haben sich geändert. Bitte die Löschung mit neuer Vorschau erneut vorbereiten.':'Löschung nicht bestätigt. Bitte Verbindung und Rechte prüfen; vor einem erneuten Versuch aktuelle Daten laden.';
+      $('#deleteAllStatus').textContent=deleteFailureMessage(error);
       clearDeleteConfirmation();return;
     }
     clearDeleteConfirmation();favorites=[];lateRegistrationToken='';renderRegistrationAvailability();saveFavs();geocodingDiagnostics.clear();

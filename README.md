@@ -38,11 +38,11 @@ Das Paket verwendet das bereits eingerichtete Supabase-Projekt. Alle Standdaten 
 
 Unter **Admin → Neue Anmeldungen annehmen** lässt sich die öffentliche Anmeldung für alle Geräte öffnen und schließen. Bei geschlossener Anmeldung erscheint ein Hinweis. Admins können weiterhin Stände manuell anlegen. Die Einstellung und die Sperre beim Speichern werden in Supabase verwaltet.
 
-Unter **Admin → Nachzügler-Tokens** werden bei geschlossener Anmeldung einmalige Tokens erzeugt. Der Empfänger gibt den Token im Anmeldebereich ein; erst eine erfolgreich gespeicherte Anmeldung verbraucht ihn. Der Anmeldestatus wird per Realtime übertragen, bei Wiederverbindung neu geladen und zusätzlich in sichtbaren Apps alle fünf Sekunden abgefragt.
+Unter **Admin → Nachzügler-Tokens** werden bei geschlossener Anmeldung einmalige Tokens erzeugt. Der Empfänger gibt den Token im Anmeldebereich ein; erst eine erfolgreich gespeicherte Anmeldung verbraucht ihn. Der Anmeldestatus wird per Realtime übertragen, bei Wiederverbindung neu geladen und zusätzlich in sichtbaren Apps alle fünf Minuten abgefragt.
 
 Der Überblick unter der Karte zeigt Stände, Verpflegung, Favoriten und die häufigsten Warengruppen für die aktuelle Suche und Filterauswahl.
 
-Ersetze die geänderten App-Dateien im selben Repository und veröffentliche den Commit. Bei Änderungen an App-Dateien erhöhe die Versionsnummer von `CACHE_NAME` in `sw.js`, damit bereits installierte Apps den neuen Stand übernehmen. Dieses Paket verwendet Version `dorfflohmarkt-v74`.
+Ersetze die geänderten App-Dateien im selben Repository und veröffentliche den Commit. Bei Änderungen an App-Dateien erhöhe die Versionsnummer von `CACHE_NAME` in `sw.js`, damit bereits installierte Apps den neuen Stand übernehmen. Dieses Paket verwendet Version `dorfflohmarkt-v78`.
 
 
 Lade beim Aktualisieren sämtliche entpackten ZIP-Dateien in dasselbe Stammverzeichnis hoch, einschließlich `routing-client.js` und der versteckten Datei `.nojekyll`. Unter **Settings → Pages** bleibt die Quelle **Deploy from a branch**, Branch **main**, Ordner **/ (root)**. Das ZIP selbst ist kein Pages-Artefakt zum direkten Veröffentlichen.
@@ -57,3 +57,11 @@ Nach „Später“ bleibt bei verfügbarem Update im Hamburgermenü **App aktual
 Vor Veröffentlichung im bestehenden Supabase-Projekt `supabase-app-administration.sql` aus dem Projektordner nach den bisherigen Anmelde-, Token- und Abmelde-Erweiterungen ausführen. Das Script richtet die Aktiv-/Inaktiv-Steuerung und die zweistufige Sammellöschung ein; es führt keine Löschung aus. Danach die aktualisierte Edge Function `geocode-stands` bereitstellen, damit auch Positionsanfragen die Pausierung beachten. Die SQL-Dateien und Backendquellen sind bewusst nicht im öffentlichen ZIP enthalten.
 
 Die Karte beginnt wieder in der Straßenansicht und bleibt beim Start auf Dudenhofen zentriert.
+
+
+Die regelmäßigen Supabase-Abfragen für Einstellungen, Standdaten und Adminzähler erfolgen bei sichtbarer App alle fünf Minuten. Beim Start, Wiederverbinden und manuellen Aktualisieren werden Daten weiterhin sofort geladen. Realtime-Nachrichten übernehmen Änderungen weiterhin direkt. Bei der Sammellöschung werden fehlende Serverfunktionen, fehlende Adminrechte, geänderte Daten und abgelaufene Bestätigungen getrennt gemeldet.
+
+
+## Korrektur der Sammellöschung ab Version 76
+
+Bei „DELETE requires a WHERE clause“ einmal supabase-delete-all-where-fix.sql im Supabase SQL Editor ausführen. Es ersetzt nur die Serverfunktion und löscht beim Einspielen keine Daten. Keine Änderung an Edge Functions nötig.
