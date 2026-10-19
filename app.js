@@ -5,6 +5,8 @@ const legacyStandIds={
   'example-beethoven':'943afd79-7ef8-5146-bcfd-7358a2edeba6'
 };
 const SUPABASE_REFRESH_INTERVAL=5*60*1000;
+const GEOCODING_PROVIDER='here';
+const GEOCODING_MAX_AGE=29*24*60*60*1000;
 let stands=[];
 let appActive=null,appActivitySaving=false;
 let manualStandGeocodingAddress=null;
@@ -28,7 +30,7 @@ const geocodingReport=document.createElement('details');
 geocodingReport.className='admin-manual-entry geocoding-report';
 geocodingReport.innerHTML='<summary id="geocodingReportHeading">Geocodierung: Fehlerbericht <span id="geocodingReportCount" class="admin-count-badge" aria-label="Stände ohne Kartenposition">0</span></summary><p>Veröffentlichte Stände ohne genaue Kartenposition. Laufende und noch ausstehende Suchen sind gesondert gekennzeichnet.</p><p id="geocodingReportSummary" role="status"></p><button class="secondary-button" type="button" data-geocode-all>Alle erneut versuchen</button><p id="geocodingReportMessage" role="status"></p><div id="geocodingReportList"></div>';
 $('#adminDashboard .admin-manage-entry').after(geocodingReport);
-function hasStandPosition(stand){return Number.isFinite(stand.lat)&&Number.isFinite(stand.lng)&&Math.abs(stand.lat)<=90&&Math.abs(stand.lng)<=180&&(stand.geocodingSource!=='maps-co'||stand.geocodingExpiresAt>Date.now())}
+function hasStandPosition(stand){return Number.isFinite(stand.lat)&&Number.isFinite(stand.lng)&&Math.abs(stand.lat)<=90&&Math.abs(stand.lng)<=180&&stand.geocodingSource===GEOCODING_PROVIDER&&stand.geocodingExpiresAt>Date.now()}
 function renderGeocodingReport(){
   const host=$('#geocodingReportList');
   const unresolved=stands.filter(stand=>!hasStandPosition(stand)).sort((a,b)=>streetAddress(a.address).localeCompare(streetAddress(b.address),'de',{numeric:true}));
@@ -216,8 +218,7 @@ $('#planFavoritesRoute').addEventListener('click',async()=>{
     if(favs.length>99)throw new Error('Bitte wähle höchstens 99 Favoriten für eine Route aus. Es werden keine Stopps automatisch ausgelassen.');
     status('Dein aktueller Standort wird angefragt …');
     const origin=await favoriteRouter.getLocation();signal.throwIfAborted();
-    const hasPosition=stand=>Number.isFinite(stand.lat)&&Number.isFinite(stand.lng)&&
-      (stand.geocodingSource!=='maps-co'||stand.geocodingExpiresAt>Date.now());
+    const hasPosition=hasStandPosition;
     if(favs.some(stand=>!hasPosition(stand))){
       status('Fehlende Standpositionen werden ermittelt …');
       // The map may already have a lookup running. Give its result time to arrive.
@@ -354,7 +355,7 @@ const locateStandAddresses=window.createStandGeocoder({
   onCoordinates:coordinates=>{
     for(const location of coordinates){
       const stand=stands.find(value=>value.id===location.id&&value.address===location.address);
-      if(stand)Object.assign(stand,{lat:location.lat,lng:location.lng,geocodingSource:'maps-co',geocodingExpiresAt:location.expiresAt});
+      if(stand)Object.assign(stand,{lat:location.lat,lng:location.lng,geocodingSource:GEOCODING_PROVIDER,geocodingExpiresAt:location.expiresAt});
     }
     refreshStandPins();renderGeocodingReport();
   },
@@ -428,24 +429,30 @@ function updateMapStandCount(){
   const further=ranked.length>6?`${ranked.length-6} weitere ${ranked.length===7?'Warengruppe':'Warengruppen'}. `:'';
   $('#standOffersNote').textContent=ranked.length?`${further}Ein Stand kann mehrere Angebote haben.`:selection.length?'Für diese Stände sind noch keine Angebote eingetragen.':'Keine Angebote in dieser Auswahl.';
 }
+mapCanvas.addEventListener('click',event=>{
+  const button=event.target.closest('[data-map-fav]');if(!button)return;
+  const id=button.dataset.mapFav;if(!stands.some(stand=>stand.id===id))return;
+  favorites=favorites.includes(id)?favorites.filter(value=>value!==id):[...favorites,id];
+  saveFavs();
+  standPinMarkers.find(marker=>marker.options.standId===id)?.openPopup();
+  toast(favorites.includes(id)?'Stand zu deinen Favoriten hinzugefügt.':'Stand aus deinen Favoriten entfernt.');
+});
 function refreshStandPins(){
   if(!townMap||!makeMapPin){updateMapStandCount();return}
   standPinMarkers.forEach(marker=>townMap.removeLayer(marker));
   standPinMarkers.length=0;
-  const visible=stands.filter(s=>Number.isFinite(s.lat)&&Number.isFinite(s.lng)&&
-    (s.geocodingSource!=='maps-co'||s.geocodingExpiresAt>Date.now())&&matches(s));
-  // Share the normal map attribution; no separate provider label over the image.
-  const positionAttribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
-  if(visible.some(s=>s.geocodingSource==='maps-co')){
+  const visible=stands.filter(s=>hasStandPosition(s)&&matches(s));
+  const positionAttribution='Positionsdaten &copy; <a href="https://www.here.com/">HERE</a>';
+  if(visible.some(s=>s.geocodingSource===GEOCODING_PROVIDER)){
     if(!geocodingPositionAttribution){townMap.attributionControl.addAttribution(positionAttribution);geocodingPositionAttribution=true}
   }else if(geocodingPositionAttribution){townMap.attributionControl.removeAttribution(positionAttribution);geocodingPositionAttribution=false}
   visible.forEach(s=>{
     const favorite=favorites.includes(s.id),food=s.food_available==='Ja';
     const features=[favorite?'Favorit':'',food?'Mit Verpflegung':''].filter(Boolean);
     const label=[s.address,...features].join(' · ');
-    const marker=L.marker([s.lat,s.lng],{icon:makeMapPin({favorite,food}),title:label}).addTo(townMap);
+    const marker=L.marker([s.lat,s.lng],{icon:makeMapPin({favorite,food}),title:label,standId:s.id}).addTo(townMap);
     marker.getElement()?.setAttribute('aria-label',label);
-    marker.bindPopup(`<strong>${escapeHtml(streetAddress(s.address))}</strong>${features.length?`<p class="map-popup-features">${escapeHtml(features.join(' · '))}</p>`:''}${food&&s.food_description?`<p class="map-popup-food">${escapeHtml(s.food_description)}</p>`:''}`);
+    marker.bindPopup(`<strong>${escapeHtml(streetAddress(s.address))}</strong><div class="map-popup-categories">${(s.categories||[]).map(category=>`<span class="tag">${escapeHtml(category)}</span>`).join('')||'<span>Keine Kategorien angegeben.</span>'}</div><button type="button" class="map-popup-favorite secondary-button" data-map-fav="${escapeHtml(s.id)}" aria-pressed="${favorite}">${favorite?'★ Aus Favoriten entfernen':'☆ Als Favorit speichern'}</button>${features.length?`<p class="map-popup-features">${escapeHtml(features.join(' · '))}</p>`:''}${food&&s.food_description?`<p class="map-popup-food">${escapeHtml(s.food_description)}</p>`:''}`);
     standPinMarkers.push(marker);
   });
   updateMapStandCount();
@@ -555,7 +562,7 @@ async function readPublishedStandRows(){
       const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
       try{
         result=await publicStandClient.from('published_stands')
-          .select('id,created_at,address,categories,food_available,food_description,description,lat,lng',{count:'exact'})
+          .select('id,created_at,address,categories,food_available,food_description,description,lat,lng,geocoding_provider,geocoded_at',{count:'exact'})
           .order('created_at',{ascending:true}).order('id',{ascending:true}).range(offset,offset+499).abortSignal(controller.signal);
       }catch{result={error:true,status:0}}
       finally{clearTimeout(timer)}
@@ -592,9 +599,13 @@ async function loadPublishedStands({retryGeocoding=false,geocodeAddress=null}={}
   const previous=new Map(stands.map(stand=>[stand.id,stand]));
   stands=[...new Map(rows.map(row=>[row.id,row])).values()].map(row=>{
     const saved=previous.get(row.id);
-    const cached=saved?.address===row.address&&saved.geocodingSource==='maps-co'&&saved.geocodingExpiresAt>Date.now()&&
+    const cached=saved?.address===row.address&&saved.geocodingSource===GEOCODING_PROVIDER&&saved.geocodingExpiresAt>Date.now()&&
       (!Number.isFinite(row.lat)||!Number.isFinite(row.lng));
-    return {...row,title:'Flohmarktstand',...(cached?{lat:saved.lat,lng:saved.lng,geocodingSource:saved.geocodingSource,geocodingExpiresAt:saved.geocodingExpiresAt}:{})};
+    const geocodedAt=Date.parse(row.geocoded_at);
+    const serverPosition=row.geocoding_provider===GEOCODING_PROVIDER&&Number.isFinite(geocodedAt)
+      ?{geocodingSource:GEOCODING_PROVIDER,geocodingExpiresAt:geocodedAt+GEOCODING_MAX_AGE}
+      :{geocodingSource:row.geocoding_provider||null,geocodingExpiresAt:0};
+    return {...row,title:'Flohmarktstand',...serverPosition,...(cached?{lat:saved.lat,lng:saved.lng,geocodingSource:saved.geocodingSource,geocodingExpiresAt:saved.geocodingExpiresAt}:{})};
   });
   favorites=favorites.filter(id=>stands.some(s=>s.id===id));
   publishedStandListReady=true;
@@ -790,8 +801,7 @@ adminManualForm.addEventListener('submit',async event=>{
     await loadApplications();
     if(loaded!==true){adminStatus(adminManualStatus,'Der Stand ist in Supabase gespeichert und veröffentlicht. Die Anzeige konnte noch nicht aktualisiert werden. Bitte „Aktualisieren“ verwenden und den Stand nicht erneut anlegen.');return}
     const atAddress=stands.filter(stand=>stand.address===application.address);
-    const located=atAddress.length>0&&atAddress.every(stand=>Number.isFinite(stand.lat)&&Number.isFinite(stand.lng)&&
-      (stand.geocodingSource!=='maps-co'||stand.geocodingExpiresAt>Date.now()));
+    const located=atAddress.length>0&&atAddress.every(hasStandPosition);
     adminStatus(adminManualStatus,located
       ?townMap?'Stand in Supabase gespeichert, geocodiert und auf der Karte eingetragen.':'Stand in Supabase gespeichert und geocodiert. Die Kartenansicht ist gerade nicht verfügbar.'
       :'Stand in Supabase gespeichert und veröffentlicht. Eine genaue Hausposition konnte noch nicht ermittelt werden; der Stand bleibt in der Liste. Bitte Adresse prüfen oder später „Aktualisieren“ verwenden. Nicht erneut anlegen.');
@@ -801,9 +811,30 @@ adminManualForm.addEventListener('submit',async event=>{
       :'Das Speichern konnte nicht bestätigt werden. Bitte Verbindung sowie offene und veröffentlichte Stände prüfen, bevor du es erneut versuchst.')}
   finally{manualStandGeocodingAddress=null;submitButton.disabled=false}
 });
+const ADMIN_SESSION_MAX_AGE=7*24*60*60*1000;
+let adminExpiryTimer=null;
+async function enforceAdminSessionAge(session){
+  clearTimeout(adminExpiryTimer);
+  if(!session)return false;
+  let loginAt=0;
+  try{
+    const payload=JSON.parse(atob(session.access_token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+    loginAt=Math.min(...(payload.amr||[]).map(item=>Number(item.timestamp)*1000).filter(value=>Number.isFinite(value)&&value>0));
+  }catch{}
+  if(!Number.isFinite(loginAt)||!loginAt||Date.now()>=loginAt+ADMIN_SESSION_MAX_AGE){
+    await supabaseClient.auth.signOut({scope:'local'});
+    adminLoginMessage.textContent='Deine Admin-Anmeldung ist abgelaufen. Bitte erneut anmelden.';
+    return false;
+  }
+  adminExpiryTimer=setTimeout(()=>refreshAdmin(),Math.max(1,loginAt+ADMIN_SESSION_MAX_AGE-Date.now()));
+  return true;
+}
+window.addEventListener('focus',()=>{if(supabaseClient)void refreshAdmin()});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&supabaseClient)void refreshAdmin()});
 async function refreshAdmin(){
   if(!supabaseClient){adminStatus(adminLoginMessage,'Supabase ist noch nicht eingerichtet.');return}
-  const {data:{session}}=await supabaseClient.auth.getSession();
+  const {data:{session:storedSession}}=await supabaseClient.auth.getSession();
+  const session=await enforceAdminSessionAge(storedSession)?storedSession:null;
   if(adminSessionId!==(session?.user.id||null)){adminSessionId=session?.user.id||null;adminSessionVersion++;pendingCountSequence++;$('#generatedLateToken').value='';$('#lateTokenOutput').hidden=true;clearDeleteConfirmation();}
   adminLoginForm.hidden=Boolean(session);adminDashboard.hidden=!session;
   renderGeocodingReport();

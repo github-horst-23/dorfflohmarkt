@@ -419,3 +419,7 @@ h1.page-title{margin:0 0 22px;font:600 clamp(27px,3.4vw,38px)/1.12 Manrope,sans-
 .app-paused main>.page:not(#page-admin){display:none!important}.app-paused .drawer-group{display:none}.app-paused .header-actions .install-button{display:none}
 #deleteAllConfirmation{display:grid;gap:14px;margin-top:16px}#deleteAllConfirmation[hidden]{display:none}#deleteAllConfirmation label{display:grid;gap:7px}#deleteAllConfirmation input{width:100%;padding:12px;border:1px solid var(--line);border-radius:7px;font-size:16px}.danger-zone .danger-button{background:#a4262c;color:#fff}.danger-zone .danger-button:hover{background:#7e1d22}
 @media(max-width:560px){.app-unavailable{margin:24px 12px;padding:18px}}
+
+.map-popup-categories{display:flex;flex-wrap:wrap;gap:4px;margin:10px 0;max-width:280px;max-height:180px;overflow:auto}
+.map-popup-categories .tag{margin:0;font-size:11px;line-height:1.4}
+.map-popup-favorite{width:100%;margin-top:4px;min-height:40px}

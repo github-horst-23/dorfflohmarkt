@@ -17,8 +17,10 @@ window.createStandGeocoder = function ({ client, config, onCoordinates, onStatus
       if (saved && saved.expiresAt > now) { onCoordinates([saved]); continue; }
       cache.delete(key);
       if (Number.isFinite(stand.lat) && Number.isFinite(stand.lng) &&
-          (stand.geocodingSource !== 'maps-co' || stand.geocodingExpiresAt > now)) continue;
-      if (stand.geocodingSource === 'maps-co') onCoordinates([{ id: stand.id, address: stand.address, lat: null, lng: null, expiresAt: 0 }]);
+          stand.geocodingSource === 'here' && stand.geocodingExpiresAt > now) continue;
+      if (Number.isFinite(stand.lat) || Number.isFinite(stand.lng)) {
+        onCoordinates([{ id: stand.id, address: stand.address, lat: null, lng: null, expiresAt: 0 }]);
+      }
       if (!pending.has(key) && (retryAfter.get(key) || 0) <= now) missing.push({ id: stand.id, address: stand.address, key });
     }
     if (!missing.length) { await Promise.all(waiting); if (!pending.size) onStatus(''); return; }

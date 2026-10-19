@@ -28,7 +28,7 @@ Weitere Informationen: [Installierbare PWAs bei MDN](https://developer.mozilla.o
 
 ## Bestehende Datenanbindung
 
-Das Paket verwendet das bereits eingerichtete Supabase-Projekt. Alle Standdaten einschließlich der manuell angelegten Stände liegen in Supabase. Die drei zuvor eingebauten Stände wurden in die gemeinsame Datenbank übernommen. Anmeldungen, Adminzugang, Veranstaltungstermin und Geocodierung bleiben darüber verbunden. `supabase-config.js` enthält die öffentliche Projekt-URL und den öffentlichen Publishable Key. Der private Schlüssel für geocode.maps.co liegt ausschließlich in Supabase. Für Karte, Geocodierung, Anmeldungen und aktuelle Standdaten wird eine Internetverbindung benötigt.
+Das Paket verwendet das bereits eingerichtete Supabase-Projekt. Alle Standdaten einschließlich der manuell angelegten Stände liegen in Supabase. Die drei zuvor eingebauten Stände wurden in die gemeinsame Datenbank übernommen. Anmeldungen, Adminzugang, Veranstaltungstermin und Geocodierung bleiben darüber verbunden. `supabase-config.js` enthält die öffentliche Projekt-URL und den öffentlichen Publishable Key. Der private HERE-Schlüssel liegt ausschließlich als Supabase-Secret `HERE_API_KEY` vor. Für Karte, Geocodierung, Anmeldungen und aktuelle Standdaten wird eine Internetverbindung benötigt.
 
 ## Favoritenroute
 
@@ -42,7 +42,7 @@ Unter **Admin → Nachzügler-Tokens** werden bei geschlossener Anmeldung einmal
 
 Der Überblick unter der Karte zeigt Stände, Verpflegung, Favoriten und die häufigsten Warengruppen für die aktuelle Suche und Filterauswahl.
 
-Ersetze die geänderten App-Dateien im selben Repository und veröffentliche den Commit. Bei Änderungen an App-Dateien erhöhe die Versionsnummer von `CACHE_NAME` in `sw.js`, damit bereits installierte Apps den neuen Stand übernehmen. Dieses Paket verwendet Version `dorfflohmarkt-v79`.
+Ersetze die geänderten App-Dateien im selben Repository und veröffentliche den Commit. Bei Änderungen an App-Dateien erhöhe die Versionsnummer von `CACHE_NAME` in `sw.js`, damit bereits installierte Apps den neuen Stand übernehmen. Dieses Paket verwendet Version `dorfflohmarkt-v81`.
 
 
 Lade beim Aktualisieren sämtliche entpackten ZIP-Dateien in dasselbe Stammverzeichnis hoch, einschließlich `routing-client.js` und der versteckten Datei `.nojekyll`. Unter **Settings → Pages** bleibt die Quelle **Deploy from a branch**, Branch **main**, Ordner **/ (root)**. Das ZIP selbst ist kein Pages-Artefakt zum direkten Veröffentlichen.
@@ -67,6 +67,8 @@ Die regelmäßigen Supabase-Abfragen für Einstellungen, Standdaten und Adminzä
 Bei „DELETE requires a WHERE clause“ einmal supabase-delete-all-where-fix.sql im Supabase SQL Editor ausführen. Es ersetzt nur die Serverfunktion und löscht beim Einspielen keine Daten. Keine Änderung an Edge Functions nötig.
 
 
-## Dauerhafte Koordinaten ab Version 79
+## HERE-Geocodierung ab Version 81
 
-Zuerst supabase-permanent-stand-coordinates.sql im Supabase SQL Editor ausführen, dann geocode-stands aktualisieren und das App-Paket veröffentlichen. Erfolgreiche Positionen werden dauerhaft in published_stands gespeichert und passende bestehende Cachepositionen übernommen.
+Vor der App-Veröffentlichung im Supabase SQL Editor die aktuelle `supabase-geocoding.sql` ausführen. Danach das Secret `HERE_API_KEY` setzen und die beiden Dateien der Edge Function `geocode-stands` neu bereitstellen. Erst anschließend Version 81 veröffentlichen. Die frühere Migration für dauerhafte Koordinaten wird nicht mehr verwendet.
+
+Bestehende Koordinaten anderer Anbieter werden beim Wechsel verworfen und automatisch durch genaue HERE-Hauspositionen ersetzt. Gültige Treffer werden nicht bei jedem Laden erneut gesucht. App und Server erneuern sie nach 29 Tagen als Sicherheitspuffer vor der 30-Tage-Grenze. Der Supabase-Cronjob `expire-here-stand-geocoding` bereinigt abgelaufene Werte; beim nächsten App-Start, bei Netzrückkehr oder beim Fünf-Minuten-Abgleich werden sie erneut angefragt.
