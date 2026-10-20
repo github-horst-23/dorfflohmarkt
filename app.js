@@ -1000,6 +1000,44 @@ function downloadPrivateFile(content,type,name){
   const link=document.createElement('a');link.href=url;link.download=name;link.click();
   setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
+function createXlsxWorkbook(worksheets){
+  const encoder=new TextEncoder();
+  const xml=value=>String(value??'').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const valueText=value=>Array.isArray(value)?value.join(', '):value&&typeof value==='object'?JSON.stringify(value):value;
+  const columnName=index=>{let name='';for(let value=index;value;value=Math.floor((value-1)/26))name=String.fromCharCode(65+(value-1)%26)+name;return name};
+  const sheetXml=(rows,preferred,headers)=>{
+    const keys=[...preferred,...new Set(rows.flatMap(row=>Object.keys(row)).filter(key=>!preferred.includes(key)))];
+    const rowXml=(values,rowNumber,header=false)=>`<row r="${rowNumber}">${values.map((value,index)=>`<c r="${columnName(index+1)}${rowNumber}" t="inlineStr"${header?' s="1"':''}><is><t xml:space="preserve">${xml(valueText(value))}</t></is></c>`).join('')}</row>`;
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetData>'+
+      rowXml(keys.map(key=>headers[key]||key),1,true)+rows.map((row,index)=>rowXml(keys.map(key=>row[key]),index+2)).join('')+
+      '</sheetData><autoFilter ref="A1:'+columnName(Math.max(keys.length,1))+(rows.length+1)+'"/></worksheet>';
+  };
+  const sheetNames=worksheets.map(sheet=>sheet.name);
+  const files={
+    '[Content_Types].xml':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'+worksheets.map((_,index)=>`<Override PartName="/xl/worksheets/sheet${index+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')+'</Types>',
+    '_rels/.rels':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
+    'xl/workbook.xml':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets>'+sheetNames.map((name,index)=>`<sheet name="${xml(name)}" sheetId="${index+1}" r:id="rId${index+1}"/>`).join('')+'</sheets></workbook>',
+    'xl/_rels/workbook.xml.rels':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+worksheets.map((_,index)=>`<Relationship Id="rId${index+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index+1}.xml"/>`).join('')+`<Relationship Id="rId${worksheets.length+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
+    'xl/styles.xml':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>'
+  };
+  worksheets.forEach((sheet,index)=>{files[`xl/worksheets/sheet${index+1}.xml`]=sheetXml(sheet.rows,sheet.preferred,sheet.headers)});
+  const crcTable=Array.from({length:256},(_,n)=>{let c=n;for(let i=0;i<8;i++)c=(c&1)?0xedb88320^(c>>>1):c>>>1;return c>>>0});
+  const crc32=bytes=>{let crc=0xffffffff;for(const byte of bytes)crc=crcTable[(crc^byte)&255]^(crc>>>8);return (crc^0xffffffff)>>>0};
+  const join=parts=>{const output=new Uint8Array(parts.reduce((sum,part)=>sum+part.length,0));let offset=0;for(const part of parts){output.set(part,offset);offset+=part.length}return output};
+  const header=(size,values)=>{const bytes=new Uint8Array(size),view=new DataView(bytes.buffer);for(const [offset,value,width] of values)width===2?view.setUint16(offset,value,true):view.setUint32(offset,value,true);return bytes};
+  const now=new Date(),dosTime=(now.getHours()<<11)|(now.getMinutes()<<5)|(now.getSeconds()>>1),dosDate=((now.getFullYear()-1980)<<9)|((now.getMonth()+1)<<5)|now.getDate();
+  const local=[],central=[];let offset=0;
+  for(const [name,content] of Object.entries(files)){
+    const nameBytes=encoder.encode(name),data=encoder.encode(content),crc=crc32(data);
+    const localHeader=header(30,[[0,0x04034b50,4],[4,20,2],[6,0,2],[8,0,2],[10,dosTime,2],[12,dosDate,2],[14,crc,4],[18,data.length,4],[22,data.length,4],[26,nameBytes.length,2],[28,0,2]]);
+    local.push(localHeader,nameBytes,data);
+    const centralHeader=header(46,[[0,0x02014b50,4],[4,20,2],[6,20,2],[8,0,2],[10,0,2],[12,dosTime,2],[14,dosDate,2],[16,crc,4],[20,data.length,4],[24,data.length,4],[28,nameBytes.length,2],[30,0,2],[32,0,2],[34,0,2],[36,0,2],[38,0,4],[42,offset,4]]);
+    central.push(centralHeader,nameBytes);offset+=localHeader.length+nameBytes.length+data.length;
+  }
+  const centralBytes=join(central),end=header(22,[[0,0x06054b50,4],[4,0,2],[6,0,2],[8,Object.keys(files).length,2],[10,Object.keys(files).length,2],[12,centralBytes.length,4],[16,offset,4],[20,0,2]]);
+  return join([...local,centralBytes,end]);
+}
 function downloadRegistrationPdf(application,receipt){
   const ascii=value=>String(value).replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/Ä/g,'Ae').replace(/Ö/g,'Oe').replace(/Ü/g,'Ue').replace(/ß/g,'ss').replace(/[^\x20-\x7e]/g,'?');
   const labels={first_name:'Vorname',last_name:'Nachname',email:'E-Mail',address:'Standort',categories:'Angebote',food_available:'Verpflegung',food_description:'Verpflegungsangebot',description:'Beschreibung'};
@@ -1094,10 +1132,12 @@ $('#exportStands').addEventListener('click',async event=>{
     const {data,error}=await supabaseClient.rpc('admin_export_stands');
     if(sessionVersion!==adminSessionVersion||adminDashboard.hidden)return;
     if(error)throw error;
-    const xml=value=>String(value??'').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    const sheet=(name,rows)=>{const preferred=name==='Anmeldungen'?['first_name','last_name','address','email']:['address'];const keys=[...preferred,...new Set(rows.flatMap(row=>Object.keys(row)).filter(key=>!preferred.includes(key)))];const headers={first_name:'Vorname',last_name:'Nachname',address:'Adresse',email:'E-Mail'};const cell=value=>`<Cell><Data ss:Type="String">${xml(Array.isArray(value)?value.join(', '):value)}</Data></Cell>`;return `<Worksheet ss:Name="${name}"><Table><Row>${keys.map(key=>cell(headers[key]||key)).join('')}</Row>${rows.map(row=>'<Row>'+keys.map(key=>cell(row[key])).join('')+'</Row>').join('')}</Table></Worksheet>`};
-    const workbook='<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'+sheet('Anmeldungen',data.registrations||[])+sheet('Veröffentlichte Stände',data.published||[])+'</Workbook>';
-    downloadPrivateFile(workbook,'application/vnd.ms-excel','Dorfflohmarkt-Vertraulich.xls');status.textContent='Export erstellt. Enthält vertrauliche Daten; nicht weiterveröffentlichen.';
+    const headers={first_name:'Vorname',last_name:'Nachname',address:'Adresse',email:'E-Mail'};
+    const workbook=createXlsxWorkbook([
+      {name:'Anmeldungen',rows:data.registrations||[],preferred:['first_name','last_name','address','email'],headers},
+      {name:'Veröffentlichte Stände',rows:data.published||[],preferred:['address'],headers}
+    ]);
+    downloadPrivateFile(workbook,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','Dorfflohmarkt-Vertraulich.xlsx');status.textContent='Excel-Datei erstellt. Enthält vertrauliche Daten; nicht weiterveröffentlichen.';
   }catch{status.textContent='Export nicht verfügbar. Adminfreigabe und Supabase-Erweiterung prüfen.'}finally{button.disabled=false}
 });
 
