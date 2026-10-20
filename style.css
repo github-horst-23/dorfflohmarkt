@@ -423,3 +423,5 @@ h1.page-title{margin:0 0 22px;font:600 clamp(27px,3.4vw,38px)/1.12 Manrope,sans-
 .map-popup-categories{display:flex;flex-wrap:wrap;gap:4px;margin:10px 0;max-width:280px;max-height:180px;overflow:auto}
 .map-popup-categories .tag{margin:0;font-size:11px;line-height:1.4}
 .map-popup-favorite{width:100%;margin-top:4px;min-height:40px}
+
+#adminExportPanel>#exportStands,.geocoding-report>[data-geocode-all],.danger-zone>#prepareDeleteAll{margin-top:14px}
