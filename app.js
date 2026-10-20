@@ -300,16 +300,14 @@ $('#registrationForm').addEventListener('submit',async e=>{
   const submitButton=form.querySelector('.submit-button');
   form.dataset.submitting='true';submitButton.disabled=true;
   let error,receipt;
-  try{({data:receipt,error}=await supabaseClient.functions.invoke('registration-email',{body:{action:'submit',application}}))}
+  try{({data:receipt,error}=await supabaseClient.rpc('register_with_phrase',{p_data:application}))}
   catch{error={message:'unavailable'}}
   finally{form.dataset.submitting='false';submitButton.disabled=false}
   if(error){
-    let code='';try{code=(await error.context?.json())?.error||''}catch{}
-    if(code==='app_inactive'){await loadEventSettings();toast('Die App ist derzeit pausiert. Bitte das Organisationsteam kontaktieren.')}
-    else if(code==='late_token_invalid_or_used'){lateRegistrationToken='';renderRegistrationAvailability();$('#lateTokenMessage').textContent='Der Anmeldecode ist ungültig oder wurde bereits verwendet. Bitte einen neuen Anmeldecode beim Ortsverein anfragen.';toast('Der Anmeldecode ist ungültig oder bereits verwendet.')}
-    else if(code==='registrations_closed'){await loadEventSettings();toast('Zurzeit werden Anmeldungen nur mit Anmeldecode angenommen.')}
-    else if(code==='email_rate_limited')toast('Für diese E-Mail-Adresse wurden zu viele Bestätigungen angefordert. Bitte später erneut versuchen.')
-    else if(code==='email_unavailable')toast('Die Bestätigungs-E-Mail konnte gerade nicht versendet werden. Es wurde keine Anmeldung gespeichert. Bitte später erneut versuchen.')
+    const code=String(error.message||'');
+    if(code.includes('app_inactive')){await loadEventSettings();toast('Die App ist derzeit pausiert. Bitte das Organisationsteam kontaktieren.')}
+    else if(code.includes('late_token_invalid_or_used')){lateRegistrationToken='';renderRegistrationAvailability();$('#lateTokenMessage').textContent='Der Anmeldecode ist ungültig oder wurde bereits verwendet. Bitte einen neuen Anmeldecode beim Ortsverein anfragen.';toast('Der Anmeldecode ist ungültig oder bereits verwendet.')}
+    else if(code.includes('registrations_closed')){await loadEventSettings();toast('Zurzeit werden Anmeldungen nur mit Anmeldecode angenommen.')}
     else toast('Die Anmeldung konnte nicht gesendet werden. Bitte versuche es später erneut.');
     return;
   }
@@ -317,7 +315,7 @@ $('#registrationForm').addEventListener('submit',async e=>{
   lateRegistrationToken='';$('#lateTokenInput').value='';
   renderRegistrationAvailability();
   const name=escapeHtml(application.first_name);
-  form.innerHTML=`<div class="success-state"><span class="success-icon">✉</span><p class="eyebrow">E-MAIL-BESTÄTIGUNG AUSSTEHEND</p><h2>Prüfe dein Postfach, ${name}!</h2><p>Wir haben einen Bestätigungslink an deine E-Mail-Adresse gesendet. Erst nach dem Klick erscheint deine Anmeldung beim Organisationsteam. Ohne Bestätigung wird sie nach fünf Tagen automatisch gelöscht.</p><button class="secondary-button" type="button" id="backToMap">Zur Karte <span>↗</span></button></div>`;
+  form.innerHTML=`<div class="success-state"><span class="success-icon">✓</span><p class="eyebrow">ANMELDUNG ÜBERMITTELT</p><h2>Danke, ${name}!</h2><p>Deine Anmeldung liegt jetzt dem Organisationsteam zur Prüfung vor. Erst nach der Freigabe erscheinen die Standdaten in der App.</p><button class="secondary-button" type="button" id="backToMap">Zur Karte <span>↗</span></button></div>`;
   const receiptInfo=document.createElement('div');
   receiptInfo.innerHTML=`<h3>Deine Anmeldebestätigung</h3><p>Bewahre diese Angaben für eine spätere Abmeldung sicher auf. Die persönliche Abmeldephrase wird nur jetzt angezeigt.</p><p>Anmeldenummer: <strong>${escapeHtml(receipt.registration_id)}</strong></p><p>Abmeldephrase: <strong>${escapeHtml(receipt.keyphrase)}</strong></p>`;
   const download=document.createElement('button');download.type='button';download.className='secondary-button';download.textContent='Anmeldebestätigung als PDF herunterladen';
@@ -338,25 +336,6 @@ $$('[name="foodAvailable"]').forEach(radio=>radio.addEventListener('change',()=>
 syncFoodDetails($('#registrationForm'));syncFoodDetails(adminManualForm);
 window.addEventListener('hashchange',()=>{const name=location.hash.slice(1);if(['karte','anmeldung','favoriten','hinweise','admin'].includes(name)){$$('.page').forEach(p=>p.classList.toggle('active',p.id===`page-${name}`));$$('.nav-link').forEach(a=>a.classList.toggle('active',a.dataset.page===name));if(name==='karte'&&townMap)setTimeout(()=>{townMap.invalidateSize({pan:false});applyStartupMapView()},80);if(name==='admin')refreshAdmin();if(name==='anmeldung')loadEventSettings();renderAppActivity()}});
 if(['#anmeldung','#favoriten','#hinweise','#admin'].includes(location.hash)){const p=location.hash.slice(1);$$('.page').forEach(x=>x.classList.toggle('active',x.id===`page-${p}`))}
-async function confirmRegistrationEmailFromLink(){
-  const match=location.hash.match(/^#bestaetigen=([a-f0-9]{64})$/i);
-  if(!match)return;
-  const token=match[1].toLowerCase();
-  history.replaceState(null,'',`${location.pathname}${location.search}#anmeldung`);
-  showPage('anmeldung');
-  const status=$('#emailConfirmationStatus');status.hidden=false;status.className='email-confirmation-status';
-  status.innerHTML='<strong>E-Mail-Adresse wird bestätigt …</strong><span>Bitte einen Moment warten.</span>';
-  if(!supabaseClient){status.innerHTML='<strong>Bestätigung derzeit nicht möglich</strong><span>Bitte öffne den Link später erneut.</span>';return}
-  let data,error;
-  try{({data,error}=await supabaseClient.functions.invoke('registration-email',{body:{action:'confirm',token}}))}catch{error=true}
-  if(error){status.innerHTML='<strong>Bestätigung derzeit nicht möglich</strong><span>Bitte öffne den Link später erneut.</span>';return}
-  if(data?.status==='confirmed'){
-    status.classList.add('success');status.innerHTML='<strong>E-Mail-Adresse bestätigt</strong><span>Deine Anmeldung liegt jetzt dem Organisationsteam zur Prüfung vor.</span>';
-    refreshPendingApplicationCount();
-  }else if(data?.status==='expired')status.innerHTML='<strong>Bestätigungslink abgelaufen</strong><span>Die Frist von fünf Tagen ist abgelaufen. Bitte melde deinen Stand erneut an.</span>';
-  else status.innerHTML='<strong>Bestätigungslink ungültig</strong><span>Der Link wurde nicht erkannt. Bitte verwende den vollständigen Link aus der E-Mail.</span>';
-}
-void confirmRegistrationEmailFromLink();
 const defaultMapCenter=[49.3186,8.3886],defaultMapZoom=15;
 let townMap=null,mapStartupViewPending=true;
 function applyStartupMapView(){
