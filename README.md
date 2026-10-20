@@ -42,7 +42,7 @@ Unter **Admin → Nachzügler-Tokens** werden bei geschlossener Anmeldung einmal
 
 Der Überblick unter der Karte zeigt Stände, Verpflegung, Favoriten und die häufigsten Warengruppen für die aktuelle Suche und Filterauswahl.
 
-Ersetze die geänderten App-Dateien im selben Repository und veröffentliche den Commit. Bei Änderungen an App-Dateien erhöhe die Versionsnummer von `CACHE_NAME` in `sw.js`, damit bereits installierte Apps den neuen Stand übernehmen. Dieses Paket verwendet Version `dorfflohmarkt-v86`.
+Ersetze die geänderten App-Dateien im selben Repository und veröffentliche den Commit. Bei Änderungen an App-Dateien erhöhe die Versionsnummer von `CACHE_NAME` in `sw.js`, damit bereits installierte Apps den neuen Stand übernehmen. Dieses Paket verwendet Version `dorfflohmarkt-v87`.
 
 
 Lade beim Aktualisieren sämtliche entpackten ZIP-Dateien in dasselbe Stammverzeichnis hoch, einschließlich `routing-client.js` und der versteckten Datei `.nojekyll`. Unter **Settings → Pages** bleibt die Quelle **Deploy from a branch**, Branch **main**, Ordner **/ (root)**. Das ZIP selbst ist kein Pages-Artefakt zum direkten Veröffentlichen.
@@ -72,3 +72,10 @@ Bei „DELETE requires a WHERE clause“ einmal supabase-delete-all-where-fix.sq
 Vor der App-Veröffentlichung im Supabase SQL Editor die aktuelle `supabase-geocoding.sql` ausführen. Danach das Secret `HERE_API_KEY` setzen und die beiden Dateien der Edge Function `geocode-stands` neu bereitstellen. Erst anschließend Version 81 veröffentlichen. Die frühere Migration für dauerhafte Koordinaten wird nicht mehr verwendet.
 
 Bestehende Koordinaten anderer Anbieter werden beim Wechsel verworfen und automatisch durch genaue HERE-Hauspositionen ersetzt. Gültige Treffer werden nicht bei jedem Laden erneut gesucht. App und Server erneuern sie nach 29 Tagen als Sicherheitspuffer vor der 30-Tage-Grenze. Der Supabase-Cronjob `expire-here-stand-geocoding` bereinigt abgelaufene Werte; beim nächsten App-Start, bei Netzrückkehr oder beim Fünf-Minuten-Abgleich werden sie erneut angefragt.
+
+
+## E-Mail-Bestätigung ab Version 87
+
+Vor der Veröffentlichung zuerst `supabase-email-confirmation.sql` im Supabase SQL Editor ausführen. Danach die Edge Function `registration-email` aus `supabase/functions/registration-email/index.ts` bereitstellen. In den Supabase-Secrets `STRATO_SMTP_USER` auf `donotreply@dudenhofen.org`, `STRATO_SMTP_PASSWORD` auf das Postfachpasswort und `PUBLIC_APP_URL` auf `https://www.dorfflohmarkt-dudenhofen.de` setzen. Optional bleiben `STRATO_SMTP_HOST=smtp.strato.de` und `STRATO_SMTP_PORT=465`; ohne diese Secrets gelten diese sicheren Standardwerte. Das Passwort niemals in App-Dateien, SQL, GitHub oder dieses Dokument schreiben.
+
+Neue öffentliche Anmeldungen erhalten zunächst den internen Status `awaiting_email`. Erst der gültige Einmallink macht sie als offene Anmeldung sichtbar. Unbestätigte Einträge werden nach fünf Tagen durch einen Supabase-Cronjob gelöscht. Die Migration sperrt ältere direkte Browseraufrufe, damit die Bestätigung nicht umgangen werden kann. Daher müssen Datenbankmigration, Edge Function und Version 87 gemeinsam veröffentlicht werden.

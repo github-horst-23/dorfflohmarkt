@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dorfflohmarkt-v86';
+const CACHE_NAME = 'dorfflohmarkt-v87';
 const APP_FILES = [
   './',
   './index.html',
