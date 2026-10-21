@@ -26,6 +26,21 @@ const featureFilters={favorites:false,food:false};
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const standAddressCollator=new Intl.Collator('de',{numeric:true,sensitivity:'base'});
 function compareStandAddresses(a,b){return standAddressCollator.compare(streetAddress(a.address),streetAddress(b.address))||standAddressCollator.compare(String(a.id),String(b.id))}
+const categoryKey=value=>String(value).replace(/[–—]/g,'-').replace(/\s+/g,' ').trim().toLocaleLowerCase('de');
+const configuredCategories=()=>new Map($$('#registrationForm input[name="category"]').map(input=>[categoryKey(input.value),input.value]));
+function normalizeCategories(values){
+  const parts=(Array.isArray(values)?values:[]).map(value=>String(value).trim()).filter(Boolean),known=configuredCategories(),result=[];
+  for(let index=0;index<parts.length;){
+    let match='',consumed=0;
+    for(let length=Math.min(6,parts.length-index);length>0;length--){
+      const candidate=parts.slice(index,index+length).join(', ');
+      const canonical=known.get(categoryKey(candidate));
+      if(canonical){match=canonical;consumed=length;break}
+    }
+    result.push(match||parts[index]);index+=consumed||1;
+  }
+  return result;
+}
 const geocodingReport=document.createElement('details');
 geocodingReport.className='admin-manual-entry geocoding-report';
 geocodingReport.innerHTML='<summary id="geocodingReportHeading">Geocodierung: Fehlerbericht <span id="geocodingReportCount" class="admin-count-badge" aria-label="Stände ohne Kartenposition">0</span></summary><p>Veröffentlichte Stände ohne genaue Kartenposition. Laufende und noch ausstehende Suchen sind gesondert gekennzeichnet.</p><p id="geocodingReportSummary" role="status"></p><button class="primary-button" type="button" data-geocode-all>Alle erneut versuchen</button><p id="geocodingReportMessage" role="status"></p><div id="geocodingReportList"></div>';
@@ -150,19 +165,39 @@ function streetAddress(address,fallback='Standadresse folgt'){
   return String(address||'').split(',')[0].replace(/\s*\b\d{5}\b.*$/,'').trim()||fallback;
 }
 function localStandAddress(address){const street=streetAddress(address,'');return street?`${street}, 67373 Dudenhofen`:'67373 Dudenhofen'}
-function card(s,expanded=false){
+function card(s){
   const liked=favorites.includes(s.id),heading=streetAddress(s.address);
-  return `<article class="stand-card"><div class="stand-card-top"><h3>${escapeHtml(heading)}</h3><button class="favorite-toggle ${liked?'active':''}" data-fav="${escapeHtml(s.id)}" aria-label="${liked?'Aus Favoriten entfernen':'Zu Favoriten hinzufügen'}: ${escapeHtml(heading)}">${liked?'★':'☆'}</button></div><div class="tag-row">${(s.categories||[]).map(c=>`<span class="tag">${escapeHtml(c)}</span>`).join('')}</div>${s.food_available==='Ja'&&s.food_description?`<p class="card-desc"><strong>Verpflegung:</strong> ${escapeHtml(s.food_description)}</p>`:''}<details class="stand-public-details" data-stand-id="${escapeHtml(s.id)}" ${expanded?'open':''}><summary>Standdetails</summary><dl><dt>Alle Angebote</dt><dd>${(s.categories||[]).length?`<ul>${s.categories.map(category=>`<li>${escapeHtml(category)}</li>`).join('')}</ul>`:'Keine Angaben.'}</dd><dt>Verpflegung</dt><dd>${s.food_available==='Ja'?escapeHtml(s.food_description||'Verpflegung wird angeboten.'):'Keine Verpflegung.'}</dd></dl></details></article>`;
+  return `<article class="stand-card"><div class="stand-card-top"><h3>${escapeHtml(heading)}</h3><button class="favorite-toggle ${liked?'active':''}" data-fav="${escapeHtml(s.id)}" aria-label="${liked?'Aus Favoriten entfernen':'Zu Favoriten hinzufügen'}: ${escapeHtml(heading)}">${liked?'★':'☆'}</button></div><details class="stand-public-details"><summary>Standdetails</summary><dl><dt>Alle Angebote</dt><dd>${(s.categories||[]).length?`<ul>${s.categories.map(category=>`<li>${escapeHtml(category)}</li>`).join('')}</ul>`:'Keine Angaben.'}</dd><dt>Verpflegung</dt><dd>${s.food_available==='Ja'?escapeHtml(s.food_description||'Verpflegung wird angeboten.'):'Keine Verpflegung.'}</dd></dl></details></article>`;
+}
+const b39Divider=[[8.35,49.31555],[8.365,49.3153],[8.38,49.31475],[8.395,49.31425],[8.41,49.3139]];
+function b39LatitudeAt(longitude){
+  const lng=Number(longitude);
+  if(!Number.isFinite(lng))return b39Divider[2][1];
+  for(let index=1;index<b39Divider.length;index++){
+    const [leftLng,leftLat]=b39Divider[index-1],[rightLng,rightLat]=b39Divider[index];
+    if(lng<=rightLng){const ratio=Math.max(0,Math.min(1,(lng-leftLng)/(rightLng-leftLng)));return leftLat+(rightLat-leftLat)*ratio}
+  }
+  return b39Divider.at(-1)[1];
+}
+function standArea(stand){return Number(stand.lat)>=b39LatitudeAt(stand.lng)?'north':'south'}
+function groupedStandCards(list,openAreas=null){
+  return [['north','Dudenhofen Nord'],['south','Dudenhofen Süd']].map(([area,label])=>{
+    const areaStands=list.filter(stand=>standArea(stand)===area);
+    const open=openAreas===null||openAreas.has(area);
+    return areaStands.length?`<details class="stand-area" data-area="${area}" ${open?'open':''}><summary class="stand-area-heading"><h2>${label}</h2><span>${areaStands.length} ${areaStands.length===1?'Stand':'Stände'}</span></summary><div class="stand-area-grid">${areaStands.map(card).join('')}</div></details>`:'';
+  }).join('');
 }
 function renderStands(){
-  const expanded=new Set($$('.stand-public-details[open]').map(element=>element.dataset.standId));
+  const mapAreas=$$('#standGrid .stand-area'),favoriteAreas=$$('#favoritesGrid .stand-area');
+  const openMapAreas=mapAreas.length?new Set(mapAreas.filter(area=>area.open).map(area=>area.dataset.area)):null;
+  const openFavoriteAreas=favoriteAreas.length?new Set(favoriteAreas.filter(area=>area.open).map(area=>area.dataset.area)):null;
   const visible=stands.filter(matches).sort(compareStandAddresses);
-  $('#standGrid').innerHTML=visible.map(stand=>card(stand,expanded.has(stand.id))).join('');
+  $('#standGrid').innerHTML=groupedStandCards(visible,openMapAreas);
   $('#noStands').hidden=visible.length>0;
   $('#noStands').textContent=stands.length?'Keine Stände für diese Auswahl gefunden.':'Noch keine Stände angemeldet.';
   $('#resultCount').textContent=`${visible.length} ${visible.length===1?'Stand':'Stände'}`;
   const favs=favorites.map(id=>stands.find(s=>s.id===id)).filter(Boolean);
-  $('#favoritesGrid').innerHTML=[...favs].sort(compareStandAddresses).map(stand=>card(stand,expanded.has(stand.id))).join('');
+  $('#favoritesGrid').innerHTML=groupedStandCards([...favs].sort(compareStandAddresses),openFavoriteAreas);
   $('#emptyFavorites').classList.toggle('visible',favs.length===0);
   $('#favoritesGrid').style.display=favs.length?'grid':'none';
   renderFavoriteRoute(favs);
@@ -616,7 +651,7 @@ async function loadPublishedStands({retryGeocoding=false,geocodeAddress=null}={}
     const serverPosition=row.geocoding_provider===GEOCODING_PROVIDER&&Number.isFinite(geocodedAt)
       ?{geocodingSource:GEOCODING_PROVIDER,geocodingExpiresAt:geocodedAt+GEOCODING_MAX_AGE}
       :{geocodingSource:row.geocoding_provider||null,geocodingExpiresAt:0};
-    return {...row,title:'Flohmarktstand',...serverPosition,...(cached?{lat:saved.lat,lng:saved.lng,geocodingSource:saved.geocodingSource,geocodingExpiresAt:saved.geocodingExpiresAt}:{})};
+    return {...row,categories:normalizeCategories(row.categories),title:'Flohmarktstand',...serverPosition,...(cached?{lat:saved.lat,lng:saved.lng,geocodingSource:saved.geocodingSource,geocodingExpiresAt:saved.geocodingExpiresAt}:{})};
   });
   favorites=favorites.filter(id=>stands.some(s=>s.id===id));
   publishedStandListReady=true;
@@ -940,14 +975,14 @@ function renderAdminPublishedStands(data){
   const signature=JSON.stringify(sorted.map(({id,address,categories,food_available,food_description,description})=>({id,address,categories,food_available,food_description,description})));
   if(signature===adminPublishedSignature)return;
   adminPublishedSignature=signature;
-  adminPublishedStands.innerHTML=sorted.map(stand=>`<article class="admin-application admin-published-stand"><details ${opened.has(stand.id)?'open':''}><summary>${escapeHtml(streetAddress(stand.address))}</summary><form class="admin-stand-edit" data-stand-id="${escapeHtml(stand.id)}"><label>Straße und Hausnummer<input name="address" required maxlength="120" value="${escapeHtml(streetAddress(stand.address,''))}"></label><label>Warengruppen, durch Komma getrennt<input name="categories" required value="${escapeHtml((stand.categories||[]).join(', '))}"></label><label>Verpflegung<select name="foodAvailable"><option value="Nein" ${stand.food_available==='Nein'?'selected':''}>Nein</option><option value="Ja" ${stand.food_available==='Ja'?'selected':''}>Ja</option></select></label><label>Angaben zur Verpflegung<textarea name="foodDescription" maxlength="500">${escapeHtml(stand.food_description||'')}</textarea></label><label>Beschreibung<textarea name="description" maxlength="1000">${escapeHtml(stand.description||'')}</textarea></label><div class="admin-actions"><button class="primary-button" type="submit">Änderungen speichern</button><button class="secondary-button danger-button" type="button" data-delete-stand="${escapeHtml(stand.id)}">Stand löschen</button></div></form></details></article>`).join('')||'<p class="empty-inline">Noch keine veröffentlichten Stände.</p>';
+  adminPublishedStands.innerHTML=sorted.map(stand=>`<article class="admin-application admin-published-stand"><details ${opened.has(stand.id)?'open':''}><summary>${escapeHtml(streetAddress(stand.address))}</summary><form class="admin-stand-edit" data-stand-id="${escapeHtml(stand.id)}"><label>Straße und Hausnummer<input name="address" required maxlength="120" value="${escapeHtml(streetAddress(stand.address,''))}"></label><label>Warengruppen, eine pro Zeile<textarea name="categories" required>${escapeHtml((stand.categories||[]).join('\n'))}</textarea></label><label>Verpflegung<select name="foodAvailable"><option value="Nein" ${stand.food_available==='Nein'?'selected':''}>Nein</option><option value="Ja" ${stand.food_available==='Ja'?'selected':''}>Ja</option></select></label><label>Angaben zur Verpflegung<textarea name="foodDescription" maxlength="500">${escapeHtml(stand.food_description||'')}</textarea></label><label>Beschreibung<textarea name="description" maxlength="1000">${escapeHtml(stand.description||'')}</textarea></label><div class="admin-actions"><button class="primary-button" type="submit">Änderungen speichern</button><button class="secondary-button danger-button" type="button" data-delete-stand="${escapeHtml(stand.id)}">Stand löschen</button></div></form></details></article>`).join('')||'<p class="empty-inline">Noch keine veröffentlichten Stände.</p>';
   adminPublishedStands.querySelectorAll('.admin-stand-edit').forEach(form=>form.addEventListener('submit',savePublishedStand));
   adminPublishedStands.querySelectorAll('[data-delete-stand]').forEach(button=>button.addEventListener('click',()=>deletePublishedStand(button.dataset.deleteStand)));
 }
 async function savePublishedStand(event){
   event.preventDefault();
   const form=event.currentTarget,data=new FormData(form),id=form.dataset.standId;
-  const categories=data.get('categories').split(',').map(value=>value.trim()).filter(Boolean);
+  const categories=normalizeCategories(data.get('categories').split(/\r?\n/));
   if(!categories.length){adminStatus(adminManageMessage,'Bitte mindestens eine Warengruppe eintragen.');return}
   const address=localStandAddress(data.get('address'));
   const previousAddress=stands.find(stand=>stand.id===id)?.address;

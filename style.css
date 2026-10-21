@@ -330,6 +330,18 @@ h1.page-title{margin:0 0 22px;font:600 clamp(27px,3.4vw,38px)/1.12 Manrope,sans-
 .stand-card-top{gap:12px;align-items:flex-start}
 .stand-card-top h3{margin:0;min-width:0;overflow-wrap:anywhere}
 .stand-card-top .favorite-toggle{flex-shrink:0}
+.stand-grid{display:block}
+.stand-area+.stand-area{margin-top:34px}
+.stand-area-heading{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin:0 0 14px;padding:0 34px 9px 0;border-bottom:2px solid var(--green);position:relative;cursor:pointer;list-style:none}
+.stand-area-heading::-webkit-details-marker{display:none}
+.stand-area-heading::marker{content:''}
+.stand-area-heading::after{content:'＋';position:absolute;right:3px;top:-2px;color:var(--green);font-size:21px;font-weight:400}
+.stand-area[open]>.stand-area-heading::after{content:'−'}
+.stand-area-heading h2{margin:0;font:700 20px Manrope,sans-serif;color:var(--ink)}
+.stand-area-heading span{color:var(--muted);font-size:12px}
+.stand-area-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}
+@media(max-width:760px){.stand-area-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.stand-area-grid{grid-template-columns:1fr}.stand-area+.stand-area{margin-top:28px}}
 .filter-features{display:flex;flex-wrap:wrap;gap:7px;flex-basis:100%;padding-top:3px}
 .consent a{color:var(--green);text-decoration:underline;text-underline-offset:2px}
 #registrationForm>.rules-confirmation,#registrationForm>.submit-button{margin-top:3em}
