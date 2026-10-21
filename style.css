@@ -427,4 +427,3 @@ h1.page-title{margin:0 0 22px;font:600 clamp(27px,3.4vw,38px)/1.12 Manrope,sans-
 .map-popup-favorite{width:100%;margin-top:4px;min-height:40px}
 
 #adminExportPanel>#exportStands,.geocoding-report>[data-geocode-all],.danger-zone>#prepareDeleteAll,#pendingRegistrationsPanel>#approveAllPending{margin-top:14px}
-.email-confirmation-status{display:grid;gap:.35rem;margin:0 0 1rem;padding:1rem 1.1rem;border:1px solid #e3b800;border-radius:12px;background:#fff8cf;color:#18345f}.email-confirmation-status.success{border-color:#2f7d59;background:#eaf7ef}.email-confirmation-status strong{font-size:1rem}.email-confirmation-status span{line-height:1.45}

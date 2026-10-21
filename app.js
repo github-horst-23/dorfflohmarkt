@@ -774,7 +774,7 @@ eventDateForm.addEventListener('submit',async event=>{
   if(!value||!supabaseClient){adminStatus(eventDateMessage,'Der Termin konnte nicht gespeichert werden.');return}
   adminStatus(eventDateMessage,'Termin wird gespeichert …');
   const {error}=await supabaseClient.from('event_settings').update({event_date:value}).eq('id',true);
-  if(error){adminStatus(eventDateMessage,'Speichern fehlgeschlagen. Bitte prüfen, ob supabase-event-settings.sql ausgeführt wurde.');return}
+  if(error){adminStatus(eventDateMessage,'Speichern fehlgeschlagen. Bitte Datenbankeinrichtung und Adminrechte prüfen.');return}
   setMarketDate(value);
   eventSettingsBroadcast?.postMessage({changed:true});
   adminStatus(eventDateMessage,'Termin gespeichert. Alle sichtbaren Countdown-Stellen wurden aktualisiert.');
