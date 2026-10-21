@@ -42,7 +42,7 @@ Unter **Admin → Nachzügler-Tokens** werden bei geschlossener Anmeldung einmal
 
 Der Überblick unter der Karte zeigt Stände, Verpflegung, Favoriten und die häufigsten Warengruppen für die aktuelle Suche und Filterauswahl.
 
-Ersetze die geänderten App-Dateien im selben Repository und veröffentliche den Commit. Bei Änderungen an App-Dateien erhöhe die Versionsnummer von `CACHE_NAME` in `sw.js`, damit bereits installierte Apps den neuen Stand übernehmen. Dieses Paket verwendet Version `dorfflohmarkt-v86`.
+Ersetze die geänderten App-Dateien im selben Repository und veröffentliche den Commit. Bei Änderungen an App-Dateien erhöhe die Versionsnummer von `CACHE_NAME` in `sw.js`, damit bereits installierte Apps den neuen Stand übernehmen. Dieses Paket verwendet Version `dorfflohmarkt-v88`.
 
 
 Lade beim Aktualisieren sämtliche entpackten ZIP-Dateien in dasselbe Stammverzeichnis hoch, einschließlich `routing-client.js` und der versteckten Datei `.nojekyll`. Unter **Settings → Pages** bleibt die Quelle **Deploy from a branch**, Branch **main**, Ordner **/ (root)**. Das ZIP selbst ist kein Pages-Artefakt zum direkten Veröffentlichen.
@@ -72,3 +72,7 @@ Bei „DELETE requires a WHERE clause“ einmal supabase-delete-all-where-fix.sq
 Vor der App-Veröffentlichung im Supabase SQL Editor die aktuelle `supabase-geocoding.sql` ausführen. Danach das Secret `HERE_API_KEY` setzen und die beiden Dateien der Edge Function `geocode-stands` neu bereitstellen. Erst anschließend Version 81 veröffentlichen. Die frühere Migration für dauerhafte Koordinaten wird nicht mehr verwendet.
 
 Bestehende Koordinaten anderer Anbieter werden beim Wechsel verworfen und automatisch durch genaue HERE-Hauspositionen ersetzt. Gültige Treffer werden nicht bei jedem Laden erneut gesucht. App und Server erneuern sie nach 29 Tagen als Sicherheitspuffer vor der 30-Tage-Grenze. Der Supabase-Cronjob `expire-here-stand-geocoding` bereinigt abgelaufene Werte; beim nächsten App-Start, bei Netzrückkehr oder beim Fünf-Minuten-Abgleich werden sie erneut angefragt.
+
+## Countdown-Schalter ab Version 88
+
+Vor der Veröffentlichung von Version 88 einmal `supabase-countdown-visibility.sql` im Supabase SQL Editor ausführen. Die Erweiterung ergänzt nur die gemeinsame Einstellung `countdown_visible`; bestehende Installationen starten mit sichtbarem Countdown. Anschließend das neue App-Paket veröffentlichen. Der Schalter im Adminbereich unter **Termin des Dorfflohmarkts ändern** steuert die Anzeige an allen öffentlichen Countdown-Stellen.

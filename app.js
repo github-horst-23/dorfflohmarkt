@@ -87,18 +87,25 @@ const adminManualStatus=document.createElement('p');
 adminManualStatus.className='admin-message';adminManualStatus.setAttribute('role','status');
 $('#adminManualFormHost').append(adminManualStatus);
 
-const countdownTimer=$('#countdownTimer');
 let marketDay=new Date(2027,8,1,0,0,0);
 let marketDayEnd=new Date(2027,8,2,0,0,0);
-const marketDateLabel=$('.countdown-content small');
+let countdownVisible=true,countdownSaving=false;
+function renderCountdownVisibility(){
+  $$('.countdown-badge').forEach(badge=>badge.hidden=countdownVisible!==true);
+  const toggle=$('#countdownVisibilityToggle');
+  if(!toggle)return;
+  toggle.disabled=countdownSaving;
+  toggle.setAttribute('aria-checked',String(countdownVisible===true));
+  $('#countdownVisibilityStatus').textContent=countdownSaving?'Einstellung wird gespeichert …':countdownVisible?'Der Countdown wird an allen vorgesehenen Stellen angezeigt.':'Der Countdown ist an allen öffentlichen Stellen ausgeblendet.';
+}
 function setMarketDate(value){
   const [year,month,day]=value.split('-').map(Number);
   if(!year||!month||!day)return false;
   marketDay=new Date(year,month-1,day,0,0,0);
   marketDayEnd=new Date(year,month-1,day+1,0,0,0);
   const formatted=new Intl.DateTimeFormat('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'}).format(marketDay);
-  marketDateLabel.textContent=`NÄCHSTER DORFFLOHMARKT · ${formatted}`;
-  $('.countdown-badge').setAttribute('aria-label',`Countdown bis zum Dorfflohmarkt am ${new Intl.DateTimeFormat('de-DE',{day:'numeric',month:'long',year:'numeric'}).format(marketDay)}`);
+  $$('.countdown-date-label').forEach(label=>label.textContent=`NÄCHSTER DORFFLOHMARKT · ${formatted}`);
+  $$('.countdown-badge').forEach(badge=>badge.setAttribute('aria-label',`Countdown bis zum Dorfflohmarkt am ${new Intl.DateTimeFormat('de-DE',{day:'numeric',month:'long',year:'numeric'}).format(marketDay)}`));
   const dateInput=$('#eventDateInput');
   if(dateInput)dateInput.value=`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
   updateCountdown();
@@ -106,16 +113,21 @@ function setMarketDate(value){
 }
 function updateCountdown(){
   const now=new Date();
-  if(now>=marketDay&&now<marketDayEnd){countdownTimer.textContent='Heute ist Dorfflohmarkt!';return}
-  if(now>=marketDayEnd){countdownTimer.textContent='Der Dorfflohmarkt ist vorbei.';return}
+  let text='';
+  if(now>=marketDay&&now<marketDayEnd)text='Heute ist Dorfflohmarkt!';
+  else if(now>=marketDayEnd)text='Der Dorfflohmarkt ist vorbei.';
+  else{
   const seconds=Math.floor((marketDay-now)/1000);
   const days=Math.floor(seconds/86400);
   const hours=Math.floor(seconds%86400/3600);
   const minutes=Math.floor(seconds%3600/60);
   const remainingSeconds=seconds%60;
-  countdownTimer.textContent=`${days} Tage · ${String(hours).padStart(2,'0')} Std · ${String(minutes).padStart(2,'0')} Min · ${String(remainingSeconds).padStart(2,'0')} Sek`;
+    text=`${days} Tage · ${String(hours).padStart(2,'0')} Std · ${String(minutes).padStart(2,'0')} Min · ${String(remainingSeconds).padStart(2,'0')} Sek`;
+  }
+  $$('.countdown-timer').forEach(timer=>timer.textContent=text);
 }
 updateCountdown();
+renderCountdownVisibility();
 setInterval(updateCountdown,1000);
 function saveFavs(){try{localStorage.setItem('dorfflohmarkt-favs',JSON.stringify(favorites))}catch{console.warn('Favoriten können derzeit nur im Arbeitsspeicher gehalten werden.')}renderCounts();renderStands();}
 function renderCounts(){$('#drawerFavCount').textContent=favorites.length;$('#favoritesSummary').textContent=`${favorites.length} ${favorites.length===1?'Stand':'Stände'}`}
@@ -709,7 +721,9 @@ function applyEventSettings(settings){
   const previousActive=appActive;
   appActive=typeof settings?.app_active==='boolean'?settings.app_active:null;
   if(settings?.event_date)setMarketDate(settings.event_date);
+  countdownVisible=typeof settings?.countdown_visible==='boolean'?settings.countdown_visible:true;
   registrationOpen=typeof settings?.registrations_open==='boolean'?settings.registrations_open:null;
+  renderCountdownVisibility();
   renderRegistrationAvailability();
   renderAppActivity();
   if(previousActive===false&&appActive===true)void loadPublishedStands();
@@ -719,7 +733,8 @@ async function loadEventSettings(){
   const sequence=++eventSettingsSequence;
   if(!supabaseClient){applyEventSettings(null);return}
   try{
-    const {data,error}=await supabaseClient.from('event_settings').select('event_date,registrations_open,app_active').eq('id',true).maybeSingle();
+    let {data,error}=await supabaseClient.from('event_settings').select('event_date,registrations_open,app_active,countdown_visible').eq('id',true).maybeSingle();
+    if(error?.message?.includes('countdown_visible'))({data,error}=await supabaseClient.from('event_settings').select('event_date,registrations_open,app_active').eq('id',true).maybeSingle());
     if(sequence!==eventSettingsSequence)return;
     if(error||!data){applyEventSettings(null);return}
     applyEventSettings(data);
@@ -745,7 +760,7 @@ registrationToggle.addEventListener('click',async()=>{
   const next=!registrationOpen;
   registrationSaving=true;renderRegistrationAvailability();
   try{
-    const {data,error}=await supabaseClient.from('event_settings').update({registrations_open:next}).eq('id',true).select('event_date,registrations_open,app_active').maybeSingle();
+    const {data,error}=await supabaseClient.from('event_settings').update({registrations_open:next}).eq('id',true).select('event_date,registrations_open,app_active,countdown_visible').maybeSingle();
     if(error||!data)throw new Error('Save failed');
     eventSettingsSequence++;applyEventSettings(data);
     eventSettingsBroadcast?.postMessage({changed:true});
@@ -762,7 +777,20 @@ eventDateForm.addEventListener('submit',async event=>{
   if(error){adminStatus(eventDateMessage,'Speichern fehlgeschlagen. Bitte prüfen, ob supabase-event-settings.sql ausgeführt wurde.');return}
   setMarketDate(value);
   eventSettingsBroadcast?.postMessage({changed:true});
-  adminStatus(eventDateMessage,'Termin gespeichert. Countdown und Startseite wurden aktualisiert.');
+  adminStatus(eventDateMessage,'Termin gespeichert. Alle sichtbaren Countdown-Stellen wurden aktualisiert.');
+});
+$('#countdownVisibilityToggle').addEventListener('click',async()=>{
+  if(countdownSaving||!supabaseClient)return;
+  const next=!countdownVisible;
+  countdownSaving=true;renderCountdownVisibility();
+  try{
+    const {data,error}=await supabaseClient.from('event_settings').update({countdown_visible:next}).eq('id',true).select('event_date,registrations_open,app_active,countdown_visible').maybeSingle();
+    if(error||!data)throw new Error('save_failed');
+    eventSettingsSequence++;applyEventSettings(data);
+    eventSettingsBroadcast?.postMessage({changed:true});
+    toast(next?'Countdown wird jetzt überall angezeigt.':'Countdown ist jetzt überall ausgeblendet.');
+  }catch{toast('Countdown-Einstellung konnte nicht gespeichert werden. Bitte Datenbankerweiterung und Adminrechte prüfen.');}
+  finally{countdownSaving=false;renderCountdownVisibility();}
 });
 adminManualForm.addEventListener('submit',async event=>{
   event.preventDefault();
