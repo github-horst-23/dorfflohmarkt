@@ -208,6 +208,7 @@ function renderStands(){
     toast(favorites.includes(id)?'Stand zu deinen Favoriten hinzugefügt.':'Stand aus deinen Favoriten entfernt.');
   }));
   renderCounts();refreshStandPins();
+  if($('#qualityReport'))renderQualityReport();
 }
 function currentRouteFavorites(){return favorites.map(id=>stands.find(stand=>stand.id===id)).filter(Boolean)}
 function routeSignature(favs){return JSON.stringify(favs.map(stand=>[stand.id,stand.address]))}
@@ -293,7 +294,7 @@ $('#planFavoritesRoute').addEventListener('click',async()=>{
   }
 });
 function toast(text){const t=$('#toast');t.textContent=text;t.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.classList.remove('show'),2600)}
-function showPage(name){const page=['karte','anmeldung','favoriten','hinweise','admin'].includes(name)?name:'karte';$$('.page').forEach(p=>p.classList.toggle('active',p.id===`page-${page}`));$$('.nav-link').forEach(a=>a.classList.toggle('active',a.dataset.page===page));closeDrawer();window.scrollTo({top:0,behavior:'smooth'});if(page==='karte'&&townMap)setTimeout(()=>{townMap.invalidateSize({pan:false});applyStartupMapView()},80);if(page==='admin')refreshAdmin();if(page==='anmeldung')loadEventSettings();location.hash=page;renderAppActivity()}
+function showPage(name){const page=['karte','anmeldung','favoriten','nachbefragung','hinweise','admin'].includes(name)?name:'karte';$$('.page').forEach(p=>p.classList.toggle('active',p.id===`page-${page}`));$$('.nav-link').forEach(a=>a.classList.toggle('active',a.dataset.page===page));closeDrawer();window.scrollTo({top:0,behavior:'smooth'});if(page==='karte'&&townMap)setTimeout(()=>{townMap.invalidateSize({pan:false});applyStartupMapView()},80);if(page==='admin')refreshAdmin();if(page==='anmeldung')loadEventSettings();location.hash=page;renderAppActivity()}
 const drawer=$('#drawer'),scrim=$('#scrim');function openDrawer(){drawer.classList.add('open');scrim.classList.add('show');drawer.setAttribute('aria-hidden','false');$('#menuButton').setAttribute('aria-expanded','true');refreshPendingApplicationCount()}function closeDrawer(){drawer.classList.remove('open');scrim.classList.remove('show');drawer.setAttribute('aria-hidden','true');$('#menuButton').setAttribute('aria-expanded','false')}
 $('#menuButton').addEventListener('click',openDrawer);$('#closeMenu').addEventListener('click',closeDrawer);scrim.addEventListener('click',closeDrawer);$$('[data-page]').forEach(el=>el.addEventListener('click',e=>{e.preventDefault();showPage(el.dataset.page)}));$$('.brand[href="#karte"],.hero .primary-button').forEach(el=>el.addEventListener('click',e=>{if(el.classList.contains('brand')){e.preventDefault();showPage('karte')}else{e.preventDefault();document.querySelector('#karte-map').scrollIntoView({behavior:'smooth'})}}));
 $('#organizerHomepage').addEventListener('click',event=>{
@@ -381,8 +382,8 @@ function syncFoodDetails(form){
 }
 $$('[name="foodAvailable"]').forEach(radio=>radio.addEventListener('change',()=>syncFoodDetails(radio.closest('form'))));
 syncFoodDetails($('#registrationForm'));syncFoodDetails(adminManualForm);
-window.addEventListener('hashchange',()=>{const name=location.hash.slice(1);if(['karte','anmeldung','favoriten','hinweise','admin'].includes(name)){$$('.page').forEach(p=>p.classList.toggle('active',p.id===`page-${name}`));$$('.nav-link').forEach(a=>a.classList.toggle('active',a.dataset.page===name));if(name==='karte'&&townMap)setTimeout(()=>{townMap.invalidateSize({pan:false});applyStartupMapView()},80);if(name==='admin')refreshAdmin();if(name==='anmeldung')loadEventSettings();renderAppActivity()}});
-if(['#anmeldung','#favoriten','#hinweise','#admin'].includes(location.hash)){const p=location.hash.slice(1);$$('.page').forEach(x=>x.classList.toggle('active',x.id===`page-${p}`))}
+window.addEventListener('hashchange',()=>{const name=location.hash.slice(1);if(['karte','anmeldung','favoriten','nachbefragung','hinweise','admin'].includes(name)){$$('.page').forEach(p=>p.classList.toggle('active',p.id===`page-${name}`));$$('.nav-link').forEach(a=>a.classList.toggle('active',a.dataset.page===name));if(name==='karte'&&townMap)setTimeout(()=>{townMap.invalidateSize({pan:false});applyStartupMapView()},80);if(name==='admin')refreshAdmin();if(name==='anmeldung')loadEventSettings();renderAppActivity()}});
+if(['#anmeldung','#favoriten','#nachbefragung','#hinweise','#admin'].includes(location.hash)){const p=location.hash.slice(1);$$('.page').forEach(x=>x.classList.toggle('active',x.id===`page-${p}`))}
 const defaultMapCenter=[49.3186,8.3886],defaultMapZoom=15;
 let townMap=null,mapStartupViewPending=true;
 function applyStartupMapView(){
@@ -684,6 +685,41 @@ if(supabaseClient){
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refreshIfStale()});
 }
 const adminLoginForm=$('#adminLoginForm');
+const surveyMonthOther=$('#surveyMonthOther');
+const updateSurveyMonthOther=()=>{
+  const selected=$('#surveyForm input[name="preferredMonth"]:checked')?.value;
+  const input=surveyMonthOther.querySelector('input');
+  const visible=selected==='Sonstiges';
+  surveyMonthOther.hidden=!visible;input.disabled=!visible;input.required=visible;
+  if(!visible)input.value='';
+};
+$('#surveyForm').querySelectorAll('input[name="preferredMonth"]').forEach(input=>input.addEventListener('change',updateSurveyMonthOther));
+$('#surveyForm').addEventListener('submit',async event=>{
+  event.preventDefault();const form=event.currentTarget,status=$('#surveyStatus'),button=form.querySelector('button[type="submit"]');
+  if(button.disabled||!form.reportValidity())return;
+  if(!supabaseClient){status.textContent='Die Nachbefragung ist gerade nicht erreichbar.';return}
+  const data=new FormData(form);button.disabled=true;status.textContent='Antwort wird anonym übermittelt …';
+  try{
+    const {error}=await supabaseClient.rpc('submit_market_survey',{p_role:data.get('role'),p_rating:Number(data.get('rating')),p_liked:String(data.get('liked')||'').trim(),p_improvement:String(data.get('improvement')||'').trim(),p_frequency:data.get('frequency'),p_month:data.get('preferredMonth'),p_month_other:String(data.get('preferredMonthOther')||'').trim(),p_weekday:data.get('preferredWeekday'),p_past_seller:data.get('pastSeller'),p_participate_again:data.get('participateAgain')==='Ja',p_final_feedback:String(data.get('finalFeedback')||'').trim()});
+    if(error)throw error;form.reset();updateSurveyMonthOther();status.textContent='Vielen Dank. Deine anonyme Rückmeldung wurde gespeichert.';
+  }catch(error){if(error?.message?.includes('survey_closed')){surveyOpen=false;renderSurveyAvailability();status.textContent='Die Nachbefragung wurde inzwischen geschlossen.'}else status.textContent='Die Rückmeldung konnte nicht gespeichert werden. Bitte später erneut versuchen.'}
+  finally{button.disabled=false}
+});
+
+function printStandDocument(mode){
+  const title=mode==='guide'?'Dorfflohmarkt Dudenhofen – Flohmarktplan':'Dorfflohmarkt Dudenhofen – Standliste';
+  const appUrl='https://www.dorfflohmarkt-dudenhofen.de/';
+  const sorted=[...stands].sort((a,b)=>standArea(a).localeCompare(standArea(b))||compareStandAddresses(a,b));
+  const rows=sorted.map((stand,index)=>`<tr><td>${index+1}</td><td>${escapeHtml(standArea(stand)==='north'?'Nord':'Süd')}</td><td>${escapeHtml(streetAddress(stand.address))}</td><td>${escapeHtml((stand.categories||[]).join(' · '))}</td><td>${escapeHtml(stand.food_available==='Ja'?(stand.food_description||'Ja'):'–')}</td></tr>`).join('');
+  const qr=`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(appUrl)}`;
+  const popup=window.open('','_blank');if(!popup){toast('Druckansicht wurde vom Browser blockiert. Pop-ups für diese Seite erlauben.');return}popup.opener=null;
+  popup.document.write(`<!doctype html><html lang="de"><head><meta charset="utf-8"><title>${title}</title><style>@page{size:A4;margin:12mm}body{font:10pt Arial,sans-serif;color:#18345e}header{display:flex;justify-content:space-between;align-items:start;border-bottom:3px solid #1749a5;padding-bottom:8mm;margin-bottom:7mm}h1{font-size:20pt;margin:0 0 3mm}p{margin:1mm 0}img{width:28mm;height:28mm}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ccd5e4;padding:2.5mm 2mm;text-align:left;vertical-align:top}th{background:#eaf0fb;font-size:9pt}tr{break-inside:avoid}td:nth-child(1){width:8mm}td:nth-child(2){width:12mm}td:nth-child(3){width:35mm;font-weight:700}.note{font-size:8pt;color:#52647f}@media print{button{display:none}}</style></head><body><header><div><h1>${title}</h1><p>${sorted.length} veröffentlichte Stände · getrennt durch die B39</p><p class="note">Aktuelle Karte, Filter und Favoriten: ${appUrl}</p><button onclick="print()">Drucken</button></div><img src="${qr}" alt="QR-Code zur Dorfflohmarkt-App" referrerpolicy="no-referrer"></header><table><thead><tr><th>Nr.</th><th>Gebiet</th><th>Adresse</th><th>Angebote</th><th>Verpflegung</th></tr></thead><tbody>${rows}</tbody></table></body></html>`);
+  popup.document.close();setTimeout(()=>popup.print(),900);
+}
+$('#printMarketGuide').addEventListener('click',()=>printStandDocument('guide'));
+$('#printPublicStandList').addEventListener('click',()=>printStandDocument('list'));
+$('#printAdminMarketGuide').addEventListener('click',()=>printStandDocument('guide'));
+
 const adminDashboard=$('#adminDashboard');
 const adminLoginMessage=$('#adminLoginMessage');
 const adminMessage=$('#adminMessage');
@@ -694,9 +730,20 @@ let adminPublishedSignature='';
 let adminSessionId=null,adminSessionVersion=0;
 const eventDateForm=$('#eventDateForm');
 const eventDateMessage=$('#eventDateMessage');
-let registrationOpen=null,registrationSaving=false,registrationSubmitted=false,eventSettingsSequence=0;
+let registrationOpen=null,registrationSaving=false,registrationSubmitted=false,surveyOpen=null,surveySaving=false,eventSettingsSequence=0;
 let lateRegistrationToken='',lateTokenChecking=false,lateTokenCreating=false;
 const registrationToggle=$('#registrationToggle');
+const surveyToggle=$('#surveyToggle');
+function renderSurveyAvailability(){
+  const form=$('#surveyForm'),notice=$('#surveyAvailability'),nav=$('.nav-link[data-page="nachbefragung"]');
+  const available=surveyOpen===true;
+  form.hidden=!available;notice.hidden=available;
+  notice.textContent=surveyOpen===false?'Die Nachbefragung ist derzeit geschlossen.':surveyOpen===null?'Die Nachbefragung ist gerade nicht verfügbar. Bitte später erneut versuchen.':'';
+  nav.hidden=!available;document.body.classList.toggle('survey-closed',!available);
+  surveyToggle.disabled=surveySaving||surveyOpen===null;
+  surveyToggle.setAttribute('aria-checked',String(available));
+  $('#surveySettingsStatus').textContent=surveySaving?'Einstellung wird gespeichert …':surveyOpen===null?'Die Einstellung konnte nicht geladen werden. Bitte aktualisieren.':available?'Die Nachbefragung ist öffentlich geöffnet.':'Die Nachbefragung ist ausgeschaltet.';
+}
 function renderRegistrationAvailability(){
   const notice=$('#registrationAvailability'),form=$('#registrationForm');
   if(registrationOpen===true){lateRegistrationToken='';$('#lateTokenInput').value='';}
@@ -758,8 +805,10 @@ function applyEventSettings(settings){
   if(settings?.event_date)setMarketDate(settings.event_date);
   countdownVisible=typeof settings?.countdown_visible==='boolean'?settings.countdown_visible:true;
   registrationOpen=typeof settings?.registrations_open==='boolean'?settings.registrations_open:null;
+  surveyOpen=typeof settings?.survey_open==='boolean'?settings.survey_open:null;
   renderCountdownVisibility();
   renderRegistrationAvailability();
+  renderSurveyAvailability();
   renderAppActivity();
   if(previousActive===false&&appActive===true)void loadPublishedStands();
 }
@@ -768,7 +817,8 @@ async function loadEventSettings(){
   const sequence=++eventSettingsSequence;
   if(!supabaseClient){applyEventSettings(null);return}
   try{
-    let {data,error}=await supabaseClient.from('event_settings').select('event_date,registrations_open,app_active,countdown_visible').eq('id',true).maybeSingle();
+    let {data,error}=await supabaseClient.from('event_settings').select('event_date,registrations_open,app_active,countdown_visible,survey_open').eq('id',true).maybeSingle();
+    if(error?.message?.includes('survey_open'))({data,error}=await supabaseClient.from('event_settings').select('event_date,registrations_open,app_active,countdown_visible').eq('id',true).maybeSingle());
     if(error?.message?.includes('countdown_visible'))({data,error}=await supabaseClient.from('event_settings').select('event_date,registrations_open,app_active').eq('id',true).maybeSingle());
     if(sequence!==eventSettingsSequence)return;
     if(error||!data){applyEventSettings(null);return}
@@ -795,13 +845,25 @@ registrationToggle.addEventListener('click',async()=>{
   const next=!registrationOpen;
   registrationSaving=true;renderRegistrationAvailability();
   try{
-    const {data,error}=await supabaseClient.from('event_settings').update({registrations_open:next}).eq('id',true).select('event_date,registrations_open,app_active,countdown_visible').maybeSingle();
+    const {data,error}=await supabaseClient.from('event_settings').update({registrations_open:next}).eq('id',true).select('event_date,registrations_open,app_active,countdown_visible,survey_open').maybeSingle();
     if(error||!data)throw new Error('Save failed');
     eventSettingsSequence++;applyEventSettings(data);
     eventSettingsBroadcast?.postMessage({changed:true});
     toast(next?'Anmeldungen sind jetzt geöffnet.':'Anmeldungen sind jetzt geschlossen.');
   }catch{toast('Die Einstellung konnte nicht gespeichert werden. Bitte Adminzugriff und Verbindung prüfen.')}
   finally{registrationSaving=false;renderRegistrationAvailability()}
+});
+surveyToggle.addEventListener('click',async()=>{
+  if(surveySaving||surveyOpen===null||!supabaseClient)return;
+  const next=!surveyOpen;
+  surveySaving=true;renderSurveyAvailability();
+  try{
+    const {data,error}=await supabaseClient.from('event_settings').update({survey_open:next}).eq('id',true).select('event_date,registrations_open,app_active,countdown_visible,survey_open').maybeSingle();
+    if(error||!data)throw new Error('save_failed');
+    eventSettingsSequence++;applyEventSettings(data);eventSettingsBroadcast?.postMessage({changed:true});
+    toast(next?'Nachbefragung ist jetzt geöffnet.':'Nachbefragung ist jetzt geschlossen.');
+  }catch{toast('Die Einstellung konnte nicht gespeichert werden. Bitte Datenbankerweiterung und Adminrechte prüfen.');}
+  finally{surveySaving=false;renderSurveyAvailability();}
 });
 eventDateForm.addEventListener('submit',async event=>{
   event.preventDefault();
@@ -900,7 +962,7 @@ async function refreshAdmin(){
   if(adminSessionId!==(session?.user.id||null)){adminSessionId=session?.user.id||null;adminSessionVersion++;pendingCountSequence++;$('#generatedLateToken').value='';$('#lateTokenOutput').hidden=true;clearDeleteConfirmation();}
   adminLoginForm.hidden=Boolean(session);adminDashboard.hidden=!session;
   renderGeocodingReport();
-  if(session){loadApplications();loadAdminPublishedStands();loadEventSettings();loadWithdrawalRequests()}
+  if(session){loadApplications();loadAdminPublishedStands();loadEventSettings();loadWithdrawalRequests();loadRecycleBin();loadAuditLog();loadSurveyResults()}
   else{setPendingApplicationCount(null);adminApplications.innerHTML='';$('#withdrawalRequests').textContent='';$('#withdrawalCount').textContent='–';updateAdminTodoCount();$('#exportStatus').textContent='';$('#generatedLateToken').value='';$('#lateTokenOutput').hidden=true}
 }
 adminLoginForm.addEventListener('submit',async e=>{
@@ -913,28 +975,23 @@ adminLoginForm.addEventListener('submit',async e=>{
 });
 $('#adminLogout').addEventListener('click',async()=>{await supabaseClient?.auth.signOut();await refreshAdmin()});
 supabaseClient?.auth.onAuthStateChange(()=>setTimeout(refreshAdmin,0));
-let bulkApprovalBusy=false;
+let bulkApprovalBusy=false,pendingApplications=[];
 function updateBulkApprovalButton(){
   const button=$('#approveAllPending');
-  const count=Number($('#pendingRegistrationsCount').textContent);
-  button.disabled=bulkApprovalBusy||!Number.isFinite(count)||count<1||adminDashboard.hidden;
+  const count=adminApplications.querySelectorAll('[data-pending-select]:checked').length;
+  button.disabled=bulkApprovalBusy||count<1||adminDashboard.hidden;
+  button.textContent=count?`${count} ausgewählte freigeben`:'Ausgewählte freigeben';
   adminApplications.querySelectorAll('button').forEach(button=>button.disabled=bulkApprovalBusy);
 }
 $('#approveAllPending').addEventListener('click',async()=>{
   if(bulkApprovalBusy||adminDashboard.hidden)return;
   const version=adminSessionVersion,status=$('#bulkApprovalStatus');
-  bulkApprovalBusy=true;updateBulkApprovalButton();status.textContent='Offene Anmeldungen werden ermittelt …';
+  bulkApprovalBusy=true;updateBulkApprovalButton();status.textContent='Ausgewählte Anmeldungen werden vorbereitet …';
   let approved=0,failed=0,attempted=0;
   try{
-    const ids=[];
-    for(let start=0;;start+=500){
-      const {data,error}=await supabaseClient.from('stand_registrations').select('id').eq('status','pending').order('id').range(start,start+499);
-      if(version!==adminSessionVersion||adminDashboard.hidden)return;
-      if(error)throw error;
-      ids.push(...data.map(row=>row.id));if(data.length<500)break;
-    }
-    if(!ids.length){status.textContent='Keine offenen Anmeldungen vorhanden.';return}
-    if(!confirm(`${ids.length} offene Anmeldungen jetzt gemeinsam freigeben? Die Standadressen, Angebote und Verpflegung werden öffentlich sichtbar. Namen und E-Mail-Adressen bleiben im Adminbereich.`)){status.textContent='Sammelfreigabe abgebrochen.';return}
+    const ids=[...adminApplications.querySelectorAll('[data-pending-select]:checked')].map(input=>input.value);
+    if(!ids.length){status.textContent='Bitte mindestens eine Anmeldung auswählen.';return}
+    if(!confirm(`${ids.length} ausgewählte Anmeldungen jetzt freigeben? Die Standadressen, Angebote und Verpflegung werden öffentlich sichtbar. Namen und E-Mail-Adressen bleiben im Adminbereich.`)){status.textContent='Sammelfreigabe abgebrochen.';return}
     for(const id of ids){
       if(version!==adminSessionVersion||adminDashboard.hidden)return;
       status.textContent=`Freigabe läuft: ${attempted} von ${ids.length} bearbeitet …`;
@@ -948,7 +1005,7 @@ $('#approveAllPending').addEventListener('click',async()=>{
     if(version===adminSessionVersion&&!adminDashboard.hidden)status.textContent=`Sammelfreigabe unterbrochen. ${approved} Anmeldungen wurden freigegeben. Bitte die verbleibenden offenen Anmeldungen prüfen.`;
   }finally{
     bulkApprovalBusy=false;
-    if(version===adminSessionVersion&&!adminDashboard.hidden)await Promise.allSettled([loadApplications(),loadPublishedStands(),loadWithdrawalRequests()]);
+    if(version===adminSessionVersion&&!adminDashboard.hidden)await Promise.allSettled([loadApplications(),loadPublishedStands(),loadWithdrawalRequests(),loadAuditLog()]);
     updateBulkApprovalButton();
   }
 });
@@ -958,27 +1015,43 @@ async function loadApplications(){
   const {data,error,count}=await supabaseClient.from('stand_registrations').select('*',{count:'exact'}).eq('status','pending').order('created_at',{ascending:true});
   if(sessionVersion!==adminSessionVersion||adminDashboard.hidden)return;
   if(error){setPendingApplicationCount(null);adminStatus(adminMessage,'Kein Adminzugriff. Bitte den Benutzer in Supabase als Admin freischalten.');return}
-  const pendingCount=count??data.length;
+  pendingApplications=data;const pendingCount=count??data.length;
   setPendingApplicationCount(pendingCount);
   adminStatus(adminMessage,'');
-  adminApplications.innerHTML=data.map(r=>`<article class="admin-application"><div class="admin-toolbar"><div><h3>${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)}</h3><p>${escapeHtml(localStandAddress(r.address))} · <a href="mailto:${encodeURIComponent(r.email)}">${escapeHtml(r.email)}</a></p></div><span class="admin-pending">Offen</span></div><div class="tag-row">${(r.categories||[]).map(c=>`<span class="tag">${escapeHtml(c)}</span>`).join('')}</div>${r.description?`<p>${escapeHtml(r.description)}</p>`:''}${r.food_available==='Ja'?`<p><strong>Verpflegung:</strong> ${escapeHtml(r.food_description||'Ja')}</p>`:''}<div class="admin-actions"><button class="primary-button" data-approve="${escapeHtml(r.id)}">Freigeben</button><button class="secondary-button" data-reject="${escapeHtml(r.id)}">Ablehnen</button></div></article>`).join('');
+  renderPendingApplications();
+}
+function renderPendingApplications(){
+  const term=$('#pendingSearch').value.trim().toLocaleLowerCase('de');
+  const visible=pendingApplications.filter(r=>!term||`${r.first_name} ${r.last_name} ${r.address} ${(r.categories||[]).join(' ')}`.toLocaleLowerCase('de').includes(term));
+  adminApplications.innerHTML=visible.map(r=>`<article class="admin-application"><div class="admin-toolbar"><label class="admin-select"><input type="checkbox" data-pending-select value="${escapeHtml(r.id)}"><span class="sr-only">${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)} auswählen</span></label><div><h3>${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)}</h3><p>${escapeHtml(localStandAddress(r.address))} · <a href="mailto:${encodeURIComponent(r.email)}">${escapeHtml(r.email)}</a></p></div><span class="admin-pending">Offen</span></div><div class="tag-row">${(r.categories||[]).map(c=>`<span class="tag">${escapeHtml(c)}</span>`).join('')}</div>${r.description?`<p>${escapeHtml(r.description)}</p>`:''}${r.food_available==='Ja'?`<p><strong>Verpflegung:</strong> ${escapeHtml(r.food_description||'Ja')}</p>`:''}<div class="admin-actions"><button class="primary-button" data-approve="${escapeHtml(r.id)}">Freigeben</button><button class="secondary-button" data-reject="${escapeHtml(r.id)}">Ablehnen</button></div></article>`).join('')||'<p class="empty-inline">Keine passenden offenen Anmeldungen.</p>';
   updateBulkApprovalButton();
+  adminApplications.querySelectorAll('[data-pending-select]').forEach(input=>input.addEventListener('change',updateBulkApprovalButton));
   $$('[data-approve]').forEach(button=>button.addEventListener('click',()=>moderateRegistration(button.dataset.approve,'approve')));
   $$('[data-reject]').forEach(button=>button.addEventListener('click',()=>moderateRegistration(button.dataset.reject,'reject')));
 }
+$('#pendingSearch').addEventListener('input',renderPendingApplications);
+$('#selectAllPending').addEventListener('change',event=>{adminApplications.querySelectorAll('[data-pending-select]').forEach(input=>input.checked=event.currentTarget.checked);updateBulkApprovalButton()});
 async function loadAdminPublishedStands(){
   if(await loadPublishedStands()===false)adminStatus(adminManageMessage,'Veröffentlichte Stände konnten nicht geladen werden.');
 }
 function renderAdminPublishedStands(data){
   const opened=new Set([...adminPublishedStands.querySelectorAll('details[open] .admin-stand-edit')].map(form=>form.dataset.standId));
-  const sorted=[...data].sort(compareStandAddresses);
-  const signature=JSON.stringify(sorted.map(({id,address,categories,food_available,food_description,description})=>({id,address,categories,food_available,food_description,description})));
-  if(signature===adminPublishedSignature)return;
+  const selected=new Set([...adminPublishedStands.querySelectorAll('[data-published-select]:checked')].map(input=>input.value));
+  const term=$('#publishedSearch').value.trim().toLocaleLowerCase('de'),area=$('#publishedArea').value;
+  const sorted=[...data].filter(stand=>(area==='all'||standArea(stand)===area)&&(!term||`${stand.address} ${(stand.categories||[]).join(' ')}`.toLocaleLowerCase('de').includes(term))).sort(compareStandAddresses);
+  const signature=JSON.stringify([...data].map(({id,address,categories,food_available,food_description,description})=>({id,address,categories,food_available,food_description,description})))+term+area;
   adminPublishedSignature=signature;
-  adminPublishedStands.innerHTML=sorted.map(stand=>`<article class="admin-application admin-published-stand"><details ${opened.has(stand.id)?'open':''}><summary>${escapeHtml(streetAddress(stand.address))}</summary><form class="admin-stand-edit" data-stand-id="${escapeHtml(stand.id)}"><label>Straße und Hausnummer<input name="address" required maxlength="120" value="${escapeHtml(streetAddress(stand.address,''))}"></label><label>Warengruppen, eine pro Zeile<textarea name="categories" required>${escapeHtml((stand.categories||[]).join('\n'))}</textarea></label><label>Verpflegung<select name="foodAvailable"><option value="Nein" ${stand.food_available==='Nein'?'selected':''}>Nein</option><option value="Ja" ${stand.food_available==='Ja'?'selected':''}>Ja</option></select></label><label>Angaben zur Verpflegung<textarea name="foodDescription" maxlength="500">${escapeHtml(stand.food_description||'')}</textarea></label><label>Beschreibung<textarea name="description" maxlength="1000">${escapeHtml(stand.description||'')}</textarea></label><div class="admin-actions"><button class="primary-button" type="submit">Änderungen speichern</button><button class="secondary-button danger-button" type="button" data-delete-stand="${escapeHtml(stand.id)}">Stand löschen</button></div></form></details></article>`).join('')||'<p class="empty-inline">Noch keine veröffentlichten Stände.</p>';
+  adminPublishedStands.innerHTML=sorted.map(stand=>`<article class="admin-application admin-published-stand"><label class="admin-select"><input type="checkbox" data-published-select value="${escapeHtml(stand.id)}" ${selected.has(stand.id)?'checked':''}><span class="sr-only">${escapeHtml(streetAddress(stand.address))} auswählen</span></label><details ${opened.has(stand.id)?'open':''}><summary>${escapeHtml(streetAddress(stand.address))} · ${standArea(stand)==='north'?'Nord':'Süd'}</summary><form class="admin-stand-edit" data-stand-id="${escapeHtml(stand.id)}"><label>Straße und Hausnummer<input name="address" required maxlength="120" value="${escapeHtml(streetAddress(stand.address,''))}"></label><label>Warengruppen, eine pro Zeile<textarea name="categories" required>${escapeHtml((stand.categories||[]).join('\n'))}</textarea></label><label>Verpflegung<select name="foodAvailable"><option value="Nein" ${stand.food_available==='Nein'?'selected':''}>Nein</option><option value="Ja" ${stand.food_available==='Ja'?'selected':''}>Ja</option></select></label><label>Angaben zur Verpflegung<textarea name="foodDescription" maxlength="500">${escapeHtml(stand.food_description||'')}</textarea></label><label>Beschreibung<textarea name="description" maxlength="1000">${escapeHtml(stand.description||'')}</textarea></label><div class="admin-actions"><button class="primary-button" type="submit">Änderungen speichern</button><button class="secondary-button danger-button" type="button" data-delete-stand="${escapeHtml(stand.id)}">In Papierkorb</button></div></form></details></article>`).join('')||'<p class="empty-inline">Keine passenden veröffentlichten Stände.</p>';
   adminPublishedStands.querySelectorAll('.admin-stand-edit').forEach(form=>form.addEventListener('submit',savePublishedStand));
   adminPublishedStands.querySelectorAll('[data-delete-stand]').forEach(button=>button.addEventListener('click',()=>deletePublishedStand(button.dataset.deleteStand)));
+  adminPublishedStands.querySelectorAll('[data-published-select]').forEach(input=>input.addEventListener('change',updatePublishedSelection));
+  updatePublishedSelection();
 }
+function updatePublishedSelection(){const count=adminPublishedStands.querySelectorAll('[data-published-select]:checked').length;$('#deleteSelectedPublished').disabled=count<1;$('#deleteSelectedPublished').textContent=count?`${count} ausgewählte in Papierkorb`:'Ausgewählte in Papierkorb'}
+$('#publishedSearch').addEventListener('input',()=>renderAdminPublishedStands(stands));
+$('#publishedArea').addEventListener('change',()=>renderAdminPublishedStands(stands));
+$('#selectAllPublished').addEventListener('change',event=>{adminPublishedStands.querySelectorAll('[data-published-select]').forEach(input=>input.checked=event.currentTarget.checked);updatePublishedSelection()});
+$('#deleteSelectedPublished').addEventListener('click',async()=>{const ids=[...adminPublishedStands.querySelectorAll('[data-published-select]:checked')].map(input=>input.value);if(!ids.length||!confirm(`${ids.length} ausgewählte Stände in den 30-Tage-Papierkorb verschieben?`))return;for(const id of ids){const {error}=await supabaseClient.rpc('admin_delete_published_stand',{p_id:id});if(error){adminStatus(adminManageMessage,'Sammelaktion unterbrochen. Bitte Supabase-Erweiterung prüfen.');break}}await Promise.all([loadPublishedStands(),loadRecycleBin(),loadAuditLog()])});
 async function savePublishedStand(event){
   event.preventDefault();
   const form=event.currentTarget,data=new FormData(form),id=form.dataset.standId;
@@ -990,26 +1063,65 @@ async function savePublishedStand(event){
   const {data:saved,error}=await supabaseClient.from('published_stands').update({address,categories,food_available:data.get('foodAvailable'),food_description:data.get('foodDescription').trim(),description:data.get('description').trim(),...locationUpdate}).eq('id',id).select('id').maybeSingle();
   if(error||!saved){adminStatus(adminManageMessage,'Änderungen konnten nicht gespeichert werden.');return}
   adminStatus(adminManageMessage,'Änderungen gespeichert.');
-  await loadPublishedStands();
+  await Promise.all([loadPublishedStands(),loadAuditLog()]);
 }
 async function deletePublishedStand(id){
-  if(!window.confirm('Diesen Stand aus der öffentlichen Karte löschen?'))return;
-  const {data:deleted,error}=await supabaseClient.from('published_stands').delete().eq('id',id).select('id').maybeSingle();
+  if(!window.confirm('Diesen Stand für 30 Tage in den Papierkorb verschieben?'))return;
+  const {data:deleted,error}=await supabaseClient.rpc('admin_delete_published_stand',{p_id:id});
   if(error||!deleted){adminStatus(adminManageMessage,'Der Stand konnte nicht gelöscht werden.');return}
-  adminStatus(adminManageMessage,'Stand aus der Karte gelöscht.');
-  await loadPublishedStands();
+  adminStatus(adminManageMessage,'Stand in den Papierkorb verschoben.');
+  await Promise.all([loadPublishedStands(),loadRecycleBin(),loadAuditLog()]);
 }
 async function moderateRegistration(id,action){
   if(bulkApprovalBusy)return;
   const {error}=await supabaseClient.rpc(action==='approve'?'approve_stand_registration':'reject_stand_registration',{registration_id:id});
   if(error){adminStatus(adminMessage,'Aktion fehlgeschlagen. Bitte Datenbankeinrichtung und Adminrechte prüfen.');return}
   adminStatus(adminMessage,action==='approve'?'Stand freigegeben und veröffentlicht.':'Anmeldung abgelehnt.');
-  await Promise.all([loadApplications(),loadPublishedStands()]);
+  await Promise.all([loadApplications(),loadPublishedStands(),loadAuditLog()]);
+}
+
+function renderQualityReport(){
+  const issues=[],addresses=new Map();
+  stands.forEach(stand=>{const key=streetAddress(stand.address,'').toLocaleLowerCase('de');if(key)addresses.set(key,[...(addresses.get(key)||[]),stand])});
+  for(const duplicates of addresses.values())if(duplicates.length>1)issues.push({type:'Mögliche Dublette',text:duplicates.map(stand=>streetAddress(stand.address)).join(', ')});
+  stands.forEach(stand=>{
+    const address=streetAddress(stand.address);
+    if(!Number.isFinite(stand.lat)||!Number.isFinite(stand.lng))issues.push({type:'Kartenposition fehlt',text:address});
+    if(stand.food_available==='Ja'&&!String(stand.food_description||'').trim())issues.push({type:'Verpflegung unvollständig',text:address});
+    if(!(stand.categories||[]).length)issues.push({type:'Angebot fehlt',text:address});
+    if((stand.categories||[]).some(value=>/^(Fahrräder|Roller|Dreiräder)$/i.test(String(value).trim())||/^etc\.\s*\(/i.test(String(value).trim())))issues.push({type:'Kategorie prüfen',text:`${address}: zusammengesetzte Warengruppe möglicherweise getrennt`});
+    if(Number.isFinite(stand.lat)&&Math.abs(stand.lat-b39LatitudeAt(stand.lng))<0.00018)issues.push({type:'Gebietsgrenze prüfen',text:`${address}: liegt sehr nah an der B39`});
+  });
+  $('#qualityIssueCount').textContent=String(issues.length);
+  $('#qualityReport').innerHTML=issues.map(issue=>`<article class="quality-issue"><strong>${escapeHtml(issue.type)}</strong><span>${escapeHtml(issue.text)}</span></article>`).join('')||'<p class="empty-inline">Keine auffälligen Standdaten gefunden.</p>';
+  updateAdminTodoCount();
+}
+async function loadRecycleBin(){
+  const host=$('#recycleBinList'),{data,error}=await supabaseClient.rpc('admin_recycle_bin');
+  if(error){host.textContent='Papierkorb noch nicht eingerichtet.';$('#recycleBinCount').textContent='–';return}
+  $('#recycleBinCount').textContent=String((data||[]).length);
+  host.innerHTML=(data||[]).map(item=>`<article class="admin-application"><h3>${escapeHtml(streetAddress(item.address))}</h3><p>Gelöscht: ${new Date(item.deleted_at).toLocaleString('de-DE')} · verfügbar bis ${new Date(item.expires_at).toLocaleDateString('de-DE')}</p><button class="primary-button" type="button" data-restore-stand="${escapeHtml(item.id)}">Wiederherstellen</button></article>`).join('')||'<p class="empty-inline">Der Papierkorb ist leer.</p>';
+  host.querySelectorAll('[data-restore-stand]').forEach(button=>button.addEventListener('click',async()=>{button.disabled=true;const {data:restored,error}=await supabaseClient.rpc('admin_restore_published_stand',{p_bin_id:button.dataset.restoreStand});if(error||restored!==true){toast('Stand konnte nicht wiederhergestellt werden.');button.disabled=false;return}await Promise.all([loadPublishedStands(),loadRecycleBin(),loadAuditLog()]);toast('Stand wiederhergestellt.')}));
+}
+async function loadAuditLog(){
+  const host=$('#auditLogList'),{data,error}=await supabaseClient.rpc('admin_audit_entries',{p_limit:100});
+  if(error){host.textContent='Aktionsprotokoll noch nicht eingerichtet.';return}
+  const labels={insert:'Erstellt',update:'Geändert',delete:'Gelöscht',restore:'Wiederhergestellt',approve:'Freigegeben',reject:'Abgelehnt'};
+  host.innerHTML=(data||[]).map(item=>`<article class="audit-entry"><time>${new Date(item.created_at).toLocaleString('de-DE')}</time><strong>${escapeHtml(labels[item.action]||item.action)}</strong><span>${escapeHtml(item.details?.address||item.entity_type)}</span></article>`).join('')||'<p class="empty-inline">Noch keine protokollierten Aktionen.</p>';
+}
+async function loadSurveyResults(){
+  const host=$('#adminSurveyResults'),{data,error}=await supabaseClient.rpc('admin_survey_results');
+  if(error){host.textContent='Nachbefragung noch nicht eingerichtet.';$('#surveyResponseCount').textContent='–';return}
+  $('#surveyResponseCount').textContent=String(data.count||0);
+  const summarize=(label,values)=>{const text=Object.entries(values||{}).map(([value,count])=>`${value}: ${count}`).join(' · ');return text?`<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(text)}</p>`:''};
+  host.innerHTML=`<p><strong>${data.count||0} Antworten</strong>${data.average?` · Durchschnittliche Schulnote ${escapeHtml(data.average)}`:''}</p>`
+    +summarize('Rollen',data.roles)+summarize('Gewünschter Rhythmus',data.frequencies)+summarize('Monate',data.months)+summarize('Wochentage',data.weekdays)+summarize('Erneute Teilnahme',data.participate_again)
+    +(data.recent||[]).map(item=>`<article class="survey-result"><strong>${escapeHtml(item.participant_role)} · Schulnote ${escapeHtml(item.rating)}/6</strong>${item.event_frequency?`<p>Rhythmus: ${escapeHtml(item.event_frequency)} · Monat: ${escapeHtml(item.preferred_month==='Sonstiges'&&item.preferred_month_other?item.preferred_month_other:item.preferred_month)} · Wochentag: ${escapeHtml(item.preferred_weekday)}</p>`:''}${item.past_seller_participation?`<p>Frühere Verkäuferteilnahme: ${escapeHtml(item.past_seller_participation)} · Wieder dabei: ${item.participate_again?'Ja':'Nein'}</p>`:''}${item.liked?`<p>Positiv: ${escapeHtml(item.liked)}</p>`:''}${item.improvement?`<p>Verbesserung: ${escapeHtml(item.improvement)}</p>`:''}${item.final_feedback?`<p>Abschließendes Feedback: ${escapeHtml(item.final_feedback)}</p>`:''}</article>`).join('');
 }
 
 function updateAdminTodoCount(){
   const badge=$('#drawerAdminCount');
-  const counts=['#pendingRegistrationsCount','#withdrawalCount','#geocodingReportCount'].map(selector=>$(selector).textContent.trim());
+  const counts=['#pendingRegistrationsCount','#withdrawalCount','#geocodingReportCount','#qualityIssueCount'].map(selector=>$(selector).textContent.trim());
   const known=counts.every(value=>/^\d+$/.test(value));
   const total=counts.reduce((sum,value)=>sum+(Number(value)||0),0);
   badge.hidden=$('#pendingRegistrationsCount').textContent==='–';
@@ -1103,7 +1215,7 @@ function createXlsxWorkbook(worksheets){
 function downloadRegistrationPdf(application,receipt){
   const ascii=value=>String(value).replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/Ä/g,'Ae').replace(/Ö/g,'Oe').replace(/Ü/g,'Ue').replace(/ß/g,'ss').replace(/[^\x20-\x7e]/g,'?');
   const labels={first_name:'Vorname',last_name:'Nachname',email:'E-Mail',address:'Standort',categories:'Angebote',food_available:'Verpflegung',food_description:'Verpflegungsangebot',description:'Beschreibung'};
-  const lines=['Dorfflohmarkt - Anmeldebestaetigung','Status: E-Mail-Bestaetigung ausstehend',...Object.entries(application).filter(([key])=>!['late_registration_token','status'].includes(key)).map(([k,v])=>`${labels[k]||k}: ${Array.isArray(v)?v.join(', '):v}`),'Sicher aufbewahren. Nicht oeffentlich weitergeben.','Abmeldung in der App unter Anmeldung anfragen.','Kontakt: flohmarkt@dudenhofen.org'].flatMap(line=>ascii(line).match(/.{1,85}(?:\s|$)|.{1,85}/g)||['']);
+  const lines=['Dorfflohmarkt - Anmeldebestaetigung','Status: Zur Pruefung eingegangen',...Object.entries(application).filter(([key])=>!['late_registration_token','status'].includes(key)).map(([k,v])=>`${labels[k]||k}: ${Array.isArray(v)?v.join(', '):v}`),'Sicher aufbewahren. Nicht oeffentlich weitergeben.','Abmeldung in der App unter Anmeldung anfragen.','Kontakt: flohmarkt@dudenhofen.org'].flatMap(line=>ascii(line).match(/.{1,85}(?:\s|$)|.{1,85}/g)||['']);
   const pages=[];for(let i=0;i<lines.length;i+=43)pages.push(lines.slice(i,i+43));
   const objects=['','<< /Type /Catalog /Pages 2 0 R >>','', '<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>','<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold >>'];
   const kids=[];
@@ -1204,9 +1316,9 @@ $('#exportStands').addEventListener('click',async event=>{
 });
 
 function renderAppActivity(){
-  const paused=appActive!==true,isAdminPage=location.hash==='#admin';
+  const paused=appActive!==true,isAllowedPage=location.hash==='#admin'||(location.hash==='#nachbefragung'&&surveyOpen===true);
   document.body.classList.toggle('app-paused',paused);
-  $('#appUnavailable').hidden=!paused||isAdminPage;
+  $('#appUnavailable').hidden=!paused||isAllowedPage;
   $('#appUnavailable h1').textContent=appActive===false?'Der Dorfflohmarkt ist derzeit nicht aktiv':'App-Status derzeit nicht verfügbar';
   const toggle=$('#appActivityToggle');toggle.disabled=appActive===null||appActivitySaving;
   toggle.setAttribute('aria-checked',String(appActive===true));
@@ -1254,7 +1366,7 @@ $('#prepareDeleteAll').addEventListener('click',async()=>{
     if(!data?.challenge||!data?.counts)throw new Error('invalid_preview');
     deleteChallenge={token:data.challenge,version};
     const c=data.counts;
-    $('#deleteAllPreview').textContent=`Sicherheitsabfrage 2 von 2: ${c.published} veröffentlichte Stände, ${c.registrations} interne Anmeldungen, ${c.withdrawals} Abmeldungen, ${c.secrets} Abmeldephrasen, ${c.tokens} Anmeldecodes und ${c.positions} Standpositionen werden endgültig gelöscht. Bestätigung gilt höchstens fünf Minuten.`;
+    $('#deleteAllPreview').textContent=`Sicherheitsabfrage 2 von 2: ${c.published} veröffentlichte Stände, ${c.registrations} interne Anmeldungen, ${c.withdrawals} Abmeldungen, ${c.secrets} Abmeldephrasen, ${c.tokens} Anmeldecodes, ${c.positions} Standpositionen, ${c.recycle||0} Papierkorb-Einträge und ${c.audit||0} Protokolle werden endgültig gelöscht. Bestätigung gilt höchstens fünf Minuten.`;
     $('#deleteAllConfirmation').hidden=false;$('#deleteAllConfirmation input').focus();status.textContent='Noch nichts gelöscht. Prüfe die Vorschau und bestätige die Texteingabe.';
   }catch(error){if(version===adminSessionVersion&&!adminDashboard.hidden)status.textContent=deleteFailureMessage(error)}
   finally{deleteAllBusy=false;button.disabled=false}

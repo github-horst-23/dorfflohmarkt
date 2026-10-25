@@ -12,7 +12,7 @@ Dieses Paket enthält die direkt auslieferbare Web-App mit Manifest, Service Wor
 
 Das ZIP selbst wird nicht als einzelne Datei veröffentlicht. Die versteckte Datei `.nojekyll` gehört ebenfalls in das Repository.
 
-Dieses Paket verwendet den Service-Worker-Cache **dorfflohmarkt-v92**. Ein vollständig geladener neuer Stand erscheint in der App als Updatehinweis. **Jetzt aktualisieren** aktiviert ihn; **Später** lässt die bisherige Version geöffnet und hält den Menüpunkt **App aktualisieren** bereit.
+Dieses Paket verwendet den Service-Worker-Cache **dorfflohmarkt-v95**. Ein vollständig geladener neuer Stand erscheint in der App als Updatehinweis. **Jetzt aktualisieren** aktiviert ihn; **Später** lässt die bisherige Version geöffnet und hält den Menüpunkt **App aktualisieren** bereit.
 
 ## Datenbank und Backend
 
