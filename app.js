@@ -1109,15 +1109,36 @@ async function loadAuditLog(){
   const labels={insert:'Erstellt',update:'Geändert',delete:'Gelöscht',restore:'Wiederhergestellt',approve:'Freigegeben',reject:'Abgelehnt'};
   host.innerHTML=(data||[]).map(item=>`<article class="audit-entry"><time>${new Date(item.created_at).toLocaleString('de-DE')}</time><strong>${escapeHtml(labels[item.action]||item.action)}</strong><span>${escapeHtml(item.details?.address||item.entity_type)}</span></article>`).join('')||'<p class="empty-inline">Noch keine protokollierten Aktionen.</p>';
 }
+let surveyResponseTotal=null;
 async function loadSurveyResults(){
   const host=$('#adminSurveyResults'),{data,error}=await supabaseClient.rpc('admin_survey_results');
-  if(error){host.textContent='Nachbefragung noch nicht eingerichtet.';$('#surveyResponseCount').textContent='–';return}
+  if(error){surveyResponseTotal=null;$('#deleteSurveyResponses').disabled=true;host.textContent='Nachbefragung noch nicht eingerichtet.';$('#surveyResponseCount').textContent='–';return}
+  surveyResponseTotal=Number(data.count||0);$('#deleteSurveyResponses').disabled=surveyResponseTotal===0;
   $('#surveyResponseCount').textContent=String(data.count||0);
   const summarize=(label,values)=>{const text=Object.entries(values||{}).map(([value,count])=>`${value}: ${count}`).join(' · ');return text?`<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(text)}</p>`:''};
   host.innerHTML=`<p><strong>${data.count||0} Antworten</strong>${data.average?` · Durchschnittliche Schulnote ${escapeHtml(data.average)}`:''}</p>`
     +summarize('Rollen',data.roles)+summarize('Gewünschter Rhythmus',data.frequencies)+summarize('Monate',data.months)+summarize('Wochentage',data.weekdays)+summarize('Erneute Teilnahme',data.participate_again)
     +(data.recent||[]).map(item=>`<article class="survey-result"><strong>${escapeHtml(item.participant_role)} · Schulnote ${escapeHtml(item.rating)}/6</strong>${item.event_frequency?`<p>Rhythmus: ${escapeHtml(item.event_frequency)} · Monat: ${escapeHtml(item.preferred_month==='Sonstiges'&&item.preferred_month_other?item.preferred_month_other:item.preferred_month)} · Wochentag: ${escapeHtml(item.preferred_weekday)}</p>`:''}${item.past_seller_participation?`<p>Frühere Verkäuferteilnahme: ${escapeHtml(item.past_seller_participation)} · Wieder dabei: ${item.participate_again?'Ja':'Nein'}</p>`:''}${item.liked?`<p>Positiv: ${escapeHtml(item.liked)}</p>`:''}${item.improvement?`<p>Verbesserung: ${escapeHtml(item.improvement)}</p>`:''}${item.final_feedback?`<p>Abschließendes Feedback: ${escapeHtml(item.final_feedback)}</p>`:''}</article>`).join('');
 }
+
+$('#deleteSurveyResponses').addEventListener('click',async()=>{
+  if(!supabaseClient||surveyResponseTotal===null||surveyResponseTotal===0)return;
+  const count=surveyResponseTotal,button=$('#deleteSurveyResponses'),status=$('#deleteSurveyStatus');
+  const confirmation=window.prompt(`${count} Antworten der Nachbefragung endgültig löschen? Diese Aktion kann nicht rückgängig gemacht werden. Zur Bestätigung exakt eingeben: ANTWORTEN LÖSCHEN`);
+  if(confirmation===null)return;
+  if(confirmation!=='ANTWORTEN LÖSCHEN'){status.textContent='Nicht gelöscht: Der Bestätigungstext stimmt nicht überein.';return}
+  button.disabled=true;status.textContent='Antworten werden gelöscht …';
+  try{
+    const {data,error}=await supabaseClient.rpc('admin_delete_survey_responses',{p_confirmation:confirmation,p_expected_count:count});
+    if(error)throw error;
+    if(!Number.isInteger(data)||data!==count)throw new Error('unexpected_result');
+    status.textContent=`${data} Antworten wurden endgültig gelöscht.`;
+    await Promise.all([loadSurveyResults(),loadAuditLog()]);
+  }catch(error){
+    status.textContent=error?.message?.includes('survey_data_changed')?'Die Antworten haben sich inzwischen geändert. Aktuelle Ergebnisse wurden geladen. Bitte erneut bestätigen.':'Löschung nicht bestätigt. Bitte Verbindung und Adminrechte prüfen und aktuelle Ergebnisse laden.';
+    await loadSurveyResults();
+  }finally{button.disabled=surveyResponseTotal===null||surveyResponseTotal===0}
+});
 
 function updateAdminTodoCount(){
   const badge=$('#drawerAdminCount');
