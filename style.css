@@ -464,3 +464,8 @@ h1.page-title{margin:0 0 22px;font:600 clamp(27px,3.4vw,38px)/1.12 Manrope,sans-
 #surveyForm .survey-followup[hidden]{display:none}
 @media(max-width:560px){#surveyForm fieldset{padding:13px}#surveyForm .survey-choice-list,#surveyForm .survey-choice-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#surveyForm legend{font-size:13px}}
 @media(max-width:360px){#surveyForm .survey-choice-list:not(.survey-choice-inline){grid-template-columns:1fr}}
+
+/* Reveal the original sidebar with a circle expanding from the menu button. */
+#drawer{transform:none;clip-path:circle(0px at var(--menu-origin-x,90px) var(--menu-origin-y,39px));visibility:hidden;pointer-events:none;transition:clip-path .7s cubic-bezier(.22,.7,.25,1),visibility 0s .7s}
+#drawer.open{transform:none;clip-path:circle(150vmax at var(--menu-origin-x,90px) var(--menu-origin-y,39px));visibility:visible;pointer-events:auto;transition:clip-path .7s cubic-bezier(.22,.7,.25,1),visibility 0s}
+@media(prefers-reduced-motion:reduce){#drawer,#drawer.open{transition:none}}
