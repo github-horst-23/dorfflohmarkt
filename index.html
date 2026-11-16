@@ -206,8 +206,8 @@
 <div class="admin-toolbar"><h2>Verbesserung vorschlagen</h2><button id="closeTestFeedback" type="button" class="secondary-button" aria-label="Feedback schließen">×</button></div>
 <p>Deine Nachricht und ein optionaler Screenshot werden geschützt an das Organisationsteam übermittelt. Bitte keine Passwörter oder persönlichen Daten im Screenshot zeigen.</p>
 <label>Dein Verbesserungsvorschlag <small class="required-note">Pflichtfeld</small><textarea name="message" rows="5" maxlength="3000" required></textarea></label>
-<label>Screenshot hinzufügen (optional)<input id="testFeedbackImage" type="file" accept="image/png,image/jpeg,image/webp"></label>
-<div id="testFeedbackEditor" hidden><p>Zeichne mit Maus oder Finger direkt auf dem Screenshot.</p><div class="admin-actions"><label>Markierungsfarbe <input id="testFeedbackColor" type="color" value="#ef233c"></label><button id="resetTestFeedbackImage" type="button" class="secondary-button">Markierungen zurücksetzen</button><button id="removeTestFeedbackImage" type="button" class="secondary-button">Screenshot entfernen</button></div><canvas id="testFeedbackCanvas" aria-label="Screenshot mit Freihandmarkierungen"></canvas></div>
+<label>Anderen Screenshot auswählen (optional)<input id="testFeedbackImage" type="file" accept="image/png,image/jpeg,image/webp"></label>
+<div id="testFeedbackEditor" hidden><p>Stift: Kreise mit Maus oder Finger direkt auf dem Screenshot ein, was du meinst.</p><div class="admin-actions"><label>Markierungsfarbe <input id="testFeedbackColor" type="color" value="#ef233c"></label><button id="resetTestFeedbackImage" type="button" class="secondary-button">Markierungen zurücksetzen</button><button id="removeTestFeedbackImage" type="button" class="secondary-button">Screenshot entfernen</button></div><canvas id="testFeedbackCanvas" aria-label="Screenshot mit Freihandmarkierungen"></canvas></div>
 <button id="sendTestFeedback" type="submit" class="primary-button">Feedback absenden</button><p id="testFeedbackStatus" role="status"></p></form></dialog>
 <div class="toast" id="toast" role="status"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -216,6 +216,7 @@
   <script src="geocoding-config.js"></script>
   <script src="geocoding-client.js"></script>
   <script src="routing-client.js"></script>
+  <script src="html2canvas.min.js"></script>
   <script src="app.js?update-notice=1"></script>
 </body>
 </html>

@@ -1,10 +1,11 @@
-const CACHE_NAME = 'dorfflohmarkt-v100';
+const CACHE_NAME = 'dorfflohmarkt-v101';
 const APP_FILES = [
   './',
   './index.html',
   './style.css?update-notice=1',
   './app.js?update-notice=1',
   './routing-client.js',
+  './html2canvas.min.js',
   './supabase-config.js',
   './geocoding-config.js',
   './geocoding-client.js',

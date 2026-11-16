@@ -1429,7 +1429,30 @@ async function refreshTestFeedbackMode(){
  $('#testModeStatus').textContent=error?'Testfeedback noch nicht eingerichtet.':testFeedbackEnabled?'Testversion aktiv. Feedback ist geöffnet.':'Testversion beendet. Feedback und Testkennzeichnungen sind ausgeblendet.';
 }
 function clearTestFeedbackImage(){testFeedbackBaseImage=null;$('#testFeedbackImage').value='';$('#testFeedbackEditor').hidden=true;feedbackCanvas.width=0;feedbackCanvas.height=0}
-$('#testFeedbackButton').addEventListener('click',()=>{if(testFeedbackEnabled){feedbackDialog.showModal();$('#testFeedbackForm textarea').focus()}});
+let testFeedbackCapturing=false;
+$('#testFeedbackButton').addEventListener('click',async()=>{
+ if(!testFeedbackEnabled||testFeedbackCapturing)return;
+ testFeedbackCapturing=true;const button=$('#testFeedbackButton'),status=$('#testFeedbackStatus');button.disabled=true;
+ try{
+  if(typeof window.html2canvas!=='function')throw new Error('capture_unavailable');
+  const screenshot=await window.html2canvas(document.body,{
+   useCORS:true,allowTaint:false,logging:false,backgroundColor:'#f6f8fc',
+   x:window.scrollX,y:window.scrollY,width:window.innerWidth,height:window.innerHeight,
+   windowWidth:window.innerWidth,windowHeight:window.innerHeight,
+   scale:Math.min(window.devicePixelRatio||1,1400/Math.max(window.innerWidth,window.innerHeight)),
+   ignoreElements:element=>element.id==='testFeedbackButton'||element.id==='testFeedbackDialog',
+   onclone:document=>{document.querySelectorAll('input[type="password"]').forEach(input=>{input.value='';input.setAttribute('value','')})}
+  });
+  // Keep an untouched copy so resetting annotations restores the screenshot.
+  const base=document.createElement('canvas');base.width=screenshot.width;base.height=screenshot.height;base.getContext('2d').drawImage(screenshot,0,0);
+  testFeedbackBaseImage=base;feedbackCanvas.width=base.width;feedbackCanvas.height=base.height;feedbackContext.drawImage(base,0,0);$('#testFeedbackImage').value='';$('#testFeedbackEditor').hidden=false;
+  status.textContent='App-Ansicht aufgenommen. Kreise die gewünschte Stelle mit dem Stift ein. Externe Kartenbilder können im Screenshot fehlen.';
+ }catch{status.textContent='Automatische Aufnahme nicht möglich. Du kannst einen eigenen Screenshot auswählen oder Feedback ohne Bild senden.'}
+ finally{
+  testFeedbackCapturing=false;button.disabled=false;
+  if(testFeedbackEnabled){feedbackDialog.showModal();$('#testFeedbackForm textarea').focus()}
+ }
+});
 $('#closeTestFeedback').addEventListener('click',()=>feedbackDialog.close());
 $('#removeTestFeedbackImage').addEventListener('click',clearTestFeedbackImage);
 $('#resetTestFeedbackImage').addEventListener('click',()=>{if(testFeedbackBaseImage){feedbackContext.clearRect(0,0,feedbackCanvas.width,feedbackCanvas.height);feedbackContext.drawImage(testFeedbackBaseImage,0,0,feedbackCanvas.width,feedbackCanvas.height)}});
@@ -1453,7 +1476,7 @@ $('#testFeedbackForm').addEventListener('submit',async event=>{
  const image=testFeedbackBaseImage?feedbackCanvas.toDataURL('image/jpeg',.8):null;
  if(image&&image.length>1600000){status.textContent='Der Screenshot ist zu groß. Bitte einen kleineren Ausschnitt auswählen.';return}
  testFeedbackSending=true;$('#sendTestFeedback').disabled=true;status.textContent='Feedback wird übermittelt …';
- try{const {error}=await supabaseClient.rpc('submit_test_feedback',{p_message:message,p_screenshot:image,p_page:location.hash||'#karte',p_version:'dorfflohmarkt-v100'});if(error)throw error;form.reset();clearTestFeedbackImage();status.textContent='Vielen Dank! Dein Feedback ist im geschützten Adminbereich angekommen.'}
+ try{const {error}=await supabaseClient.rpc('submit_test_feedback',{p_message:message,p_screenshot:image,p_page:location.hash||'#karte',p_version:'dorfflohmarkt-v101'});if(error)throw error;form.reset();clearTestFeedbackImage();status.textContent='Vielen Dank! Dein Feedback ist im geschützten Adminbereich angekommen.'}
  catch(error){status.textContent=error?.message?.includes('test_feedback_closed')?'Die Testversion ist beendet. Feedback ist geschlossen.':'Feedback konnte nicht gesendet werden. Deine Eingaben bleiben erhalten. Bitte später erneut versuchen.';if(error?.message?.includes('test_feedback_closed'))await refreshTestFeedbackMode()}
  finally{testFeedbackSending=false;$('#sendTestFeedback').disabled=false}
 });
