@@ -962,7 +962,7 @@ async function refreshAdmin(){
   if(adminSessionId!==(session?.user.id||null)){adminSessionId=session?.user.id||null;adminSessionVersion++;pendingCountSequence++;$('#generatedLateToken').value='';$('#lateTokenOutput').hidden=true;clearDeleteConfirmation();}
   adminLoginForm.hidden=Boolean(session);adminDashboard.hidden=!session;
   renderGeocodingReport();
-  if(session){loadApplications();loadAdminPublishedStands();loadEventSettings();loadWithdrawalRequests();loadRecycleBin();loadAuditLog();loadSurveyResults()}
+  if(session){loadApplications();loadAdminPublishedStands();loadEventSettings();loadWithdrawalRequests();loadRecycleBin();loadAuditLog();loadSurveyResults();loadTestFeedback()}
   else{setPendingApplicationCount(null);adminApplications.innerHTML='';$('#withdrawalRequests').textContent='';$('#withdrawalCount').textContent='–';updateAdminTodoCount();$('#exportStatus').textContent='';$('#generatedLateToken').value='';$('#lateTokenOutput').hidden=true}
 }
 adminLoginForm.addEventListener('submit',async e=>{
@@ -1411,3 +1411,67 @@ $('#deleteAllConfirmation').addEventListener('submit',async event=>{
   }catch{clearDeleteConfirmation();$('#deleteAllStatus').textContent='Ergebnis unklar. Bitte Standdaten aktualisieren, bevor du erneut löschst.'}
   finally{deleteAllBusy=false;form.querySelectorAll('button,input').forEach(el=>el.disabled=false)}
 });
+
+// Test-only feedback: public submissions, admin-only reading and release control.
+let testFeedbackEnabled=false,testFeedbackBaseImage=null,testFeedbackDrawing=false,testFeedbackSending=false;
+const feedbackDialog=$('#testFeedbackDialog'),feedbackCanvas=$('#testFeedbackCanvas'),feedbackContext=feedbackCanvas.getContext('2d');
+function setTestFeedbackMode(enabled){
+ testFeedbackEnabled=enabled===true;
+ document.querySelectorAll('.test-version-watermark,.test-version-badge').forEach(el=>el.hidden=!testFeedbackEnabled);
+ $('#testFeedbackButton').hidden=!testFeedbackEnabled;
+ $('#finishTestMode').disabled=!testFeedbackEnabled;
+ if(!testFeedbackEnabled&&feedbackDialog.open)feedbackDialog.close();
+}
+async function refreshTestFeedbackMode(){
+ if(!supabaseClient){setTestFeedbackMode(false);return}
+ const {data,error}=await supabaseClient.rpc('test_feedback_enabled');
+ setTestFeedbackMode(!error&&data===true);
+ $('#testModeStatus').textContent=error?'Testfeedback noch nicht eingerichtet.':testFeedbackEnabled?'Testversion aktiv. Feedback ist geöffnet.':'Testversion beendet. Feedback und Testkennzeichnungen sind ausgeblendet.';
+}
+function clearTestFeedbackImage(){testFeedbackBaseImage=null;$('#testFeedbackImage').value='';$('#testFeedbackEditor').hidden=true;feedbackCanvas.width=0;feedbackCanvas.height=0}
+$('#testFeedbackButton').addEventListener('click',()=>{if(testFeedbackEnabled){feedbackDialog.showModal();$('#testFeedbackForm textarea').focus()}});
+$('#closeTestFeedback').addEventListener('click',()=>feedbackDialog.close());
+$('#removeTestFeedbackImage').addEventListener('click',clearTestFeedbackImage);
+$('#resetTestFeedbackImage').addEventListener('click',()=>{if(testFeedbackBaseImage){feedbackContext.clearRect(0,0,feedbackCanvas.width,feedbackCanvas.height);feedbackContext.drawImage(testFeedbackBaseImage,0,0,feedbackCanvas.width,feedbackCanvas.height)}});
+$('#testFeedbackImage').addEventListener('change',async event=>{
+ const file=event.target.files[0];if(!file)return;
+ const status=$('#testFeedbackStatus');
+ if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>10*1024*1024){status.textContent='Bitte ein PNG-, JPEG- oder WebP-Bild mit höchstens 10 MB auswählen.';clearTestFeedbackImage();return}
+ try{
+ const bitmap=await createImageBitmap(file);const scale=Math.min(1,1400/Math.max(bitmap.width,bitmap.height));
+ feedbackCanvas.width=Math.round(bitmap.width*scale);feedbackCanvas.height=Math.round(bitmap.height*scale);feedbackContext.drawImage(bitmap,0,0,feedbackCanvas.width,feedbackCanvas.height);
+ testFeedbackBaseImage=bitmap;$('#testFeedbackEditor').hidden=false;status.textContent='Screenshot bereit. Du kannst jetzt Markierungen zeichnen.';
+ }catch{clearTestFeedbackImage();status.textContent='Dieses Bild konnte nicht geöffnet werden.'}
+});
+function feedbackPoint(event){const box=feedbackCanvas.getBoundingClientRect();return [(event.clientX-box.left)*feedbackCanvas.width/box.width,(event.clientY-box.top)*feedbackCanvas.height/box.height]}
+feedbackCanvas.addEventListener('pointerdown',event=>{if(!testFeedbackBaseImage||testFeedbackSending)return;event.preventDefault();testFeedbackDrawing=true;feedbackCanvas.setPointerCapture(event.pointerId);feedbackContext.beginPath();feedbackContext.moveTo(...feedbackPoint(event));feedbackContext.strokeStyle=$('#testFeedbackColor').value;feedbackContext.lineWidth=Math.max(3,feedbackCanvas.width/220);feedbackContext.lineCap='round';feedbackContext.lineJoin='round'});
+feedbackCanvas.addEventListener('pointermove',event=>{if(testFeedbackDrawing){feedbackContext.lineTo(...feedbackPoint(event));feedbackContext.stroke()}});
+for(const type of ['pointerup','pointercancel','lostpointercapture'])feedbackCanvas.addEventListener(type,()=>testFeedbackDrawing=false);
+$('#testFeedbackForm').addEventListener('submit',async event=>{
+ event.preventDefault();if(testFeedbackSending||!event.currentTarget.reportValidity()||!supabaseClient)return;
+ const form=event.currentTarget,status=$('#testFeedbackStatus'),message=form.elements.message.value.trim();if(!message){status.textContent='Bitte beschreibe deinen Verbesserungsvorschlag.';return}
+ const image=testFeedbackBaseImage?feedbackCanvas.toDataURL('image/jpeg',.8):null;
+ if(image&&image.length>1600000){status.textContent='Der Screenshot ist zu groß. Bitte einen kleineren Ausschnitt auswählen.';return}
+ testFeedbackSending=true;$('#sendTestFeedback').disabled=true;status.textContent='Feedback wird übermittelt …';
+ try{const {error}=await supabaseClient.rpc('submit_test_feedback',{p_message:message,p_screenshot:image,p_page:location.hash||'#karte',p_version:'dorfflohmarkt-v100'});if(error)throw error;form.reset();clearTestFeedbackImage();status.textContent='Vielen Dank! Dein Feedback ist im geschützten Adminbereich angekommen.'}
+ catch(error){status.textContent=error?.message?.includes('test_feedback_closed')?'Die Testversion ist beendet. Feedback ist geschlossen.':'Feedback konnte nicht gesendet werden. Deine Eingaben bleiben erhalten. Bitte später erneut versuchen.';if(error?.message?.includes('test_feedback_closed'))await refreshTestFeedbackMode()}
+ finally{testFeedbackSending=false;$('#sendTestFeedback').disabled=false}
+});
+async function loadTestFeedback(){
+ await refreshTestFeedbackMode();if(!supabaseClient)return;
+ const host=$('#testFeedbackInbox'),{data,error}=await supabaseClient.rpc('admin_test_feedback');host.replaceChildren();
+ if(error){host.textContent='Testfeedback konnte nicht geladen werden. Bitte Einrichtung und Adminrechte prüfen.';$('#testFeedbackCount').textContent='–';return}
+ $('#testFeedbackCount').textContent=String(data?.count||0);
+ for(const item of data?.items||[]){const article=document.createElement('article');article.className='survey-result';const heading=document.createElement('strong');heading.textContent=new Date(item.created_at).toLocaleString('de-DE')+' · '+item.page;const message=document.createElement('p');message.textContent=item.message;article.append(heading,message);if(item.screenshot){const details=document.createElement('details'),summary=document.createElement('summary'),image=document.createElement('img');summary.textContent='Markierten Screenshot anzeigen';image.src=item.screenshot;image.alt='Screenshot zur Rückmeldung';image.loading='lazy';details.append(summary,image);article.append(details)}host.append(article)}
+ if(!data?.count)host.textContent='Noch keine Rückmeldungen.';
+}
+$('#refreshTestFeedback').addEventListener('click',loadTestFeedback);
+$('#finishTestMode').addEventListener('click',async()=>{
+ if(!supabaseClient||!window.confirm('Testversion beenden? Wasserzeichen, Testkennzeichnung und Feedback verschwinden für alle. Vorhandenes Feedback bleibt im Adminbereich erhalten.'))return;
+ $('#finishTestMode').disabled=true;const {error}=await supabaseClient.rpc('admin_finish_test_mode');
+ if(error){$('#testModeStatus').textContent='Testversion konnte nicht beendet werden. Bitte Adminrechte und Verbindung prüfen.';$('#finishTestMode').disabled=false;return}
+ await refreshTestFeedbackMode();
+});
+setTestFeedbackMode(false);void refreshTestFeedbackMode();
+supabaseClient?.channel('test-feedback-settings').on('postgres_changes',{event:'UPDATE',schema:'public',table:'event_settings'},refreshTestFeedbackMode).subscribe();
+setInterval(()=>{if(document.visibilityState==='visible')void refreshTestFeedbackMode()},SUPABASE_REFRESH_INTERVAL);

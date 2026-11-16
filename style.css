@@ -469,3 +469,9 @@ h1.page-title{margin:0 0 22px;font:600 clamp(27px,3.4vw,38px)/1.12 Manrope,sans-
 #drawer{transform:none;clip-path:circle(0px at var(--menu-origin-x,90px) var(--menu-origin-y,39px));visibility:hidden;pointer-events:none;transition:clip-path .7s cubic-bezier(.22,.7,.25,1),visibility 0s .7s}
 #drawer.open{transform:none;clip-path:circle(150vmax at var(--menu-origin-x,90px) var(--menu-origin-y,39px));visibility:visible;pointer-events:auto;transition:clip-path .7s cubic-bezier(.22,.7,.25,1),visibility 0s}
 @media(prefers-reduced-motion:reduce){#drawer,#drawer.open{transition:none}}
+
+.test-version-watermark[hidden],.test-version-badge[hidden],.test-feedback-float[hidden]{display:none!important}
+.test-feedback-float{position:fixed;right:20px;bottom:22px;z-index:10001;box-shadow:0 5px 24px #18345e40;border-radius:28px;min-height:48px}
+.test-feedback-dialog{width:min(680px,calc(100vw - 24px));max-height:90dvh;overflow:auto;border:1px solid var(--line);border-radius:18px;padding:24px;color:var(--ink);background:white}
+.test-feedback-dialog::backdrop{background:#18345e88}.test-feedback-dialog form{display:grid;gap:16px}.test-feedback-dialog h2{margin:0}.test-feedback-dialog p{line-height:1.5}.test-feedback-dialog label{display:grid;gap:8px;font-weight:600}.test-feedback-dialog textarea{width:100%;font:inherit;padding:12px;border:1px solid var(--line);border-radius:9px}.test-feedback-dialog canvas{display:block;max-width:100%;height:auto;margin-top:14px;touch-action:none;border:1px solid var(--line);cursor:crosshair}.test-feedback-dialog [hidden]{display:none!important}#testFeedbackInbox img{display:block;max-width:100%;height:auto;margin-top:12px}#testFeedbackInbox p{white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:560px){.test-feedback-float{right:12px;bottom:12px}.test-feedback-dialog{padding:16px}}
